@@ -2,20 +2,17 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: DBeaver SQLite Model
 Bundle-SymbolicName: org.jkiss.dbeaver.ext.sqlite;singleton:=true
-Bundle-Version: 1.0.192.qualifier
-Bundle-Release-Date: 20241118
-Require-Bundle: org.jkiss.dbeaver.model,
- org.jkiss.dbeaver.ext.generic,
- org.jkiss.dbeaver.data.gis,
- org.jkiss.bundle.gis,
- org.jkiss.dbeaver.model.lsm,
- org.jkiss.bundle.antlr4,
- com.dbeaver.jdbc.driver.libsql;visibility:=reexport
+Bundle-Version: 1.0.237.qualifier
+Bundle-Release-Date: 20261005
+Require-Bundle: org.jkiss.dbeaver.ext.generic;visibility:=reexport,
+ org.jkiss.dbeaver.data.gis;visibility:=reexport,
+ org.jkiss.dbeaver.model.lsm;visibility:=reexport,
+ com.dbeaver.jdbc.api;visibility:=reexport
 Export-Package: org.jkiss.dbeaver.ext.sqlite,
- org.jkiss.dbeaver.ext.sqlite.model
+ org.jkiss.dbeaver.ext.sqlite.model,
+ org.jkiss.dbeaver.ext.sqlite.model.data
 Import-Package: org.jkiss.code
 Bundle-ActivationPolicy: lazy
-Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-Vendor: DBeaver Corp
-Bundle-ClassPath: .
 Automatic-Module-Name: org.jkiss.dbeaver.ext.sqlite

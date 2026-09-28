@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.code.NotNull;
@@ -68,18 +69,19 @@ class TilesManagementDialog extends BaseDialog {
     }
 
     @Override
-    protected void createButtonsForButtonBar(Composite parent) {
+    protected void createButtonsForButtonBar(@NotNull Composite parent) {
         createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, false);
         createButton(parent, IDialogConstants.OK_ID, IDialogConstants.PROCEED_LABEL, true);
     }
 
+    @NotNull
     @Override
-    protected Composite createDialogArea(Composite parent) {
+    protected Composite createDialogArea(@NotNull Composite parent) {
         Composite dialogArea = super.createDialogArea(parent);
         Composite composite = UIUtils.createComposite(dialogArea, 1);
         composite.setLayoutData(new GridData(GridData.FILL_BOTH));
 
-        Group group = UIUtils.createControlGroup(composite, "", 2, GridData.FILL_BOTH, 0);
+        Composite group = UIUtils.createTitledComposite(composite, "", 2, GridData.FILL_BOTH);
 
         tree = new Tree(group, SWT.FULL_SELECTION | SWT.BORDER | SWT.CHECK);
         tree.setLayoutData(new GridData(GridData.FILL_BOTH));
@@ -94,9 +96,7 @@ class TilesManagementDialog extends BaseDialog {
                 toolBar,
                 GISMessages.panel_select_tiles_action_manage_dialog_toolbar_add_new_tiles,
                 UIIcon.ADD,
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
+                SelectionListener.widgetSelectedAdapter(e -> {
                         TileLayerDefinitionDialog dialog = new TileLayerDefinitionDialog(getShell(), null);
                         int status = dialog.open();
                         if (status != IDialogConstants.OK_ID) {
@@ -116,8 +116,7 @@ class TilesManagementDialog extends BaseDialog {
                         }
                         userDefinedTiles.add(descriptor);
                         repopulateTree(descriptor, true);
-                    }
-                }
+                    })
             );
             addNewTilesItem.setEnabled(true);
 
@@ -125,9 +124,7 @@ class TilesManagementDialog extends BaseDialog {
                 toolBar,
                 GISMessages.panel_select_tiles_action_manage_dialog_toolbar_view_or_edit_tiles,
                 UIIcon.TEXTFIELD,
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
+                SelectionListener.widgetSelectedAdapter(e -> {
                         if (isRootItem(lastSelectedTreeItem)) {
                             log.error("Can't find tiles to edit!");
                             return;
@@ -158,8 +155,7 @@ class TilesManagementDialog extends BaseDialog {
                         if (originalDescriptor.equals(currentSelectedTileLayer)) {
                             currentSelectedTileLayer = editedDescriptor;
                         }
-                    }
-                }
+                    })
             );
             viewOrEditTilesItem.setEnabled(false);
 
@@ -167,9 +163,7 @@ class TilesManagementDialog extends BaseDialog {
                 toolBar,
                 GISMessages.panel_select_tiles_action_manage_dialog_toolbar_delete_tiles,
                 UIIcon.DELETE,
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
+                SelectionListener.widgetSelectedAdapter(e -> {
                         if (lastSelectedTreeItem == null || lastSelectedTreeItem.equals(predefinedTilesRootItem)) {
                             log.error("Can't find tiles to delete!");
                             return;
@@ -200,8 +194,7 @@ class TilesManagementDialog extends BaseDialog {
                         if (descriptor.equals(currentSelectedTileLayer)) {
                             currentSelectedTileLayer = null;
                         }
-                    }
-                }
+                    })
             );
             deleteTilesItem.setEnabled(false);
         }
@@ -396,20 +389,19 @@ class TilesManagementDialog extends BaseDialog {
             return GISMessages.panel_select_tiles_action_manage_dialog_tile_layer_definition_dialog_edit_tiles_title;
         }
 
+        @NotNull
         @Override
-        protected Composite createDialogArea(Composite parent) {
+        protected Composite createDialogArea(@NotNull Composite parent) {
             Composite dialogArea = super.createDialogArea(parent);
             Composite composite = UIUtils.createComposite(dialogArea, 1);
             composite.setLayoutData(new GridData(GridData.FILL_BOTH));
 
-            Group group = UIUtils.createControlGroup(
+            Composite group = UIUtils.createTitledComposite(
                 dialogArea,
                 GISMessages.panel_select_tiles_action_manage_dialog_tile_layer_definition_dialog_tiles_properties_group,
                 2,
-                SWT.NONE,
-                0
+                GridData.FILL_BOTH
             );
-            group.setLayoutData(new GridData(GridData.FILL_BOTH));
 
             int mutabilityStyle = originalTilesDescriptor != null && originalTilesDescriptor.isPredefined() ? SWT.READ_ONLY : SWT.NONE;
             labelText = UIUtils.createLabelText(
@@ -429,19 +421,15 @@ class TilesManagementDialog extends BaseDialog {
             gd.widthHint = UIUtils.getFontHeight(layersDefinitionText) * 60;
             layersDefinitionText.setLayoutData(gd);
 
-            UIUtils.createLink(dialogArea, GISMessages.panel_select_tiles_action_manage_dialog_tile_layer_definition_dialog_layers_definition_explanation_link_text, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    ShellUtils.launchProgram(
-                        HelpUtils.getHelpExternalReference("Working-with-Spatial-GIS-data#defining-custom-tile-layer"));
-                }
-            });
+            UIUtils.createLink(dialogArea, GISMessages.panel_select_tiles_action_manage_dialog_tile_layer_definition_dialog_layers_definition_explanation_link_text, SelectionListener.widgetSelectedAdapter(e ->
+                ShellUtils.launchProgram(
+                        HelpUtils.getHelpExternalReference("Working-with-Spatial-GIS-data#defining-custom-tile-layer"))));
 
             return dialogArea;
         }
 
         @Override
-        protected void createButtonsForButtonBar(Composite parent) {
+        protected void createButtonsForButtonBar(@NotNull Composite parent) {
             createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, true);
             createButton(parent, IDialogConstants.OK_ID, IDialogConstants.OK_LABEL, true);
         }

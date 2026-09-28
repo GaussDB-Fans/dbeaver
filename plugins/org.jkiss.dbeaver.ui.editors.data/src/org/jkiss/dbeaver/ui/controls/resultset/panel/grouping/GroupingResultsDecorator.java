@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,9 @@ import org.eclipse.swt.widgets.Control;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.DBPDataSource;
-import org.jkiss.dbeaver.model.DBPEvaluationContext;
-import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
-import org.jkiss.dbeaver.model.data.DBDAttributeBindingMeta;
 import org.jkiss.dbeaver.model.sql.SQLDialect;
+import org.jkiss.dbeaver.model.sql.SQLGroupingAttribute;
 import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -35,6 +33,9 @@ import org.jkiss.dbeaver.ui.controls.lightgrid.LightGrid;
 import org.jkiss.dbeaver.ui.controls.resultset.IResultSetPresentation;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetDecoratorBase;
 import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
+import org.jkiss.dbeaver.ui.controls.resultset.panel.grouping.action.ClearGroupingAction;
+import org.jkiss.dbeaver.ui.controls.resultset.panel.grouping.action.DeleteColumnAction;
+import org.jkiss.dbeaver.ui.controls.resultset.panel.grouping.action.EditColumnsAction;
 import org.jkiss.dbeaver.ui.controls.resultset.spreadsheet.Spreadsheet;
 import org.jkiss.utils.ArrayUtils;
 
@@ -54,7 +55,7 @@ public class GroupingResultsDecorator extends ResultSetDecoratorBase {
 
     @Override
     public long getDecoratorFeatures() {
-        return FEATURE_PRESENTATIONS | FEATURE_FILTERS;
+        return FEATURE_PRESENTATIONS | FEATURE_FILTERS | FEATURE_COMPACT_FILTERS;
     }
 
     @Override
@@ -86,9 +87,9 @@ public class GroupingResultsDecorator extends ResultSetDecoratorBase {
 
     @Override
     public void fillContributions(@NotNull IContributionManager contributionManager) {
-        contributionManager.add(new GroupingPanel.EditColumnsAction(container));
-        contributionManager.add(new GroupingPanel.DeleteColumnAction(container));
-        contributionManager.add(new GroupingPanel.ClearGroupingAction(container));
+        contributionManager.add(new EditColumnsAction(container));
+        contributionManager.add(new DeleteColumnAction(container));
+        contributionManager.add(new ClearGroupingAction(container));
     }
 
     @Override
@@ -147,7 +148,7 @@ public class GroupingResultsDecorator extends ResultSetDecoratorBase {
                         event.detail = DND.DROP_MOVE;
                     }
                 }
-                event.feedback = DND.FEEDBACK_SELECT;
+                event.feedback = DND.FEEDBACK_SELECT | DND.FEEDBACK_SCROLL;
             }
 
             private boolean isDropSupported(DropTargetEvent event) {
@@ -162,66 +163,44 @@ public class GroupingResultsDecorator extends ResultSetDecoratorBase {
                     return;
                 }
                 List<Object> dropElements = (List<Object>) event.data;
-                List<String> newBindings = new ArrayList<>();
-                List<DBDAttributeBinding> movedBindings = new ArrayList<>();
+                List<SQLGroupingAttribute> newBindings = new ArrayList<>();
+                List<Integer> movedBindingsIndexes = new ArrayList<>();
                 for (Object element : dropElements) {
-                    if (element instanceof DBDAttributeBinding) {
-                        DBDAttributeBinding binding = (DBDAttributeBinding) element;
-                        String attrName = getAttributeBindingName(binding);
-
-                        if (ArrayUtils.contains(container.getResultSetController().getModel().getAttributes(), binding)) {
-                            // Check for group function - can't move function columns
-                            if (container.getGroupAttributes().contains(attrName)) {
-                                // It is column move, not new binding
-                                movedBindings.add(binding);
-                            }
+                    if (element instanceof DBDAttributeBinding currentBinding) {
+                        int attrBindingIndex = ArrayUtils.indexOf(
+                            container.getResultSetController().getModel().getAttributes(),
+                            currentBinding
+                        );
+                        if (attrBindingIndex >= 0) {
+                            // It is column move, not new binding
+                            movedBindingsIndexes.add(attrBindingIndex);
                         } else {
-                            newBindings.add(attrName);
+                            newBindings.add(SQLGroupingAttribute.makeBound(currentBinding));
                         }
                     }
                 }
-                if (movedBindings.isEmpty() && newBindings.isEmpty()) {
+                if (movedBindingsIndexes.isEmpty() && newBindings.isEmpty()) {
                     return;
                 }
-                if (!movedBindings.isEmpty()) {
-                    if (gridDropListeners != null) {
-                        // Do visual reordering if needed
-//                        dropElements.clear();
-//                        dropElements.addAll(movedBindings);
-//                        for (DropTargetListener listener : gridDropListeners) {
-//                            listener.drop(event);
-//                        }
-                    }
-
+                if (!movedBindingsIndexes.isEmpty()) {
                     // Reorder columns
-                    List<String> curAttributes = new ArrayList<>(container.getGroupAttributes());
-                    if (!(presentation.getControl() instanceof Spreadsheet)) {
-                        return;
-                    }
-
-                    int overColumnIndex = ((Spreadsheet)presentationControl).getColumnIndex(event.x, event.y);
+                    int overColumnIndex = getOverColumnIndex(event, presentation);
                     if (overColumnIndex < 0) {
                         return;
                     }
-                    if (overColumnIndex >= curAttributes.size()) {
-                        overColumnIndex = curAttributes.size() - 1;
-                    }
-
-                    for (DBDAttributeBinding mb : movedBindings) {
-                        String attrName = getAttributeBindingName(mb);
-                        curAttributes.remove(attrName);
-                        curAttributes.add(overColumnIndex, attrName);
-                    }
-                    container.clearGroupingAttributes();
-                    container.addGroupingAttributes(curAttributes);
+                    container.getColumnsContainer().moveColumns(overColumnIndex, movedBindingsIndexes);
                 }
 
                 if (!newBindings.isEmpty()) {
                     container.addGroupingAttributes(newBindings);
                 }
+
                 UIUtils.asyncExec(() -> {
                     if (event.detail == DND.DROP_COPY) {
-                        GroupingConfigDialog dialog = new GroupingConfigDialog(container.getResultSetController().getControl().getShell(), container);
+                        GroupingConfigDialog dialog = new GroupingConfigDialog(
+                            container.getResultSetController().getControl().getShell(),
+                            container
+                        );
                         if (dialog.open() != IDialogConstants.OK_ID) {
                             container.clearGrouping();
                             return;
@@ -237,12 +216,10 @@ public class GroupingResultsDecorator extends ResultSetDecoratorBase {
         });
     }
 
-    private static String getAttributeBindingName(DBDAttributeBinding binding) {
-        if (binding instanceof DBDAttributeBindingMeta && binding.getMetaAttribute() != null) {
-            return DBUtils.getQuotedIdentifier(binding.getDataSource(), binding.getMetaAttribute().getLabel());
-        } else {
-            return binding.getFullyQualifiedName(DBPEvaluationContext.DML);
+    private int getOverColumnIndex(@NotNull DropTargetEvent event, @NotNull IResultSetPresentation presentation) {
+        if (!(presentation.getControl() instanceof Spreadsheet spreadsheet)) {
+            return -1;
         }
+        return spreadsheet.getColumnIndex(event.x, event.y);
     }
-
 }

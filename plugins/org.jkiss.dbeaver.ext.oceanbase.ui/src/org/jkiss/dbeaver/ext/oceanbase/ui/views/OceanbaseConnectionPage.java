@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +18,18 @@
 package org.jkiss.dbeaver.ext.oceanbase.ui.views;
 
 import org.eclipse.jface.dialogs.IDialogPage;
-import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ext.mysql.MySQLConstants;
 import org.jkiss.dbeaver.ext.oceanbase.model.auth.OceanbaseAuthModelDatabaseNative;
-import org.jkiss.dbeaver.ext.oceanbase.ui.internal.Activator;
 import org.jkiss.dbeaver.ext.oceanbase.ui.internal.OceanbaseMessages;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
@@ -48,7 +46,6 @@ import java.util.Locale;
  */
 public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements IDialogPageProvider {
     private static final Log log = Log.getLog(OceanbaseConnectionPage.class);
-    private static final ImageDescriptor logoImage = Activator.getImageDescriptor("icons/ob_logo.png");
 
     private Text portText;
     private Text hostText;
@@ -56,11 +53,9 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
     private Text tenantText;
 
     @Override
-    public void createControl(Composite composite) {
+    public void createControl(@NotNull Composite composite) {
         // Composite group = new Composite(composite, SWT.NONE);
         // group.setLayout(new GridLayout(1, true));
-        setImageDescriptor(logoImage);
-
         ModifyListener textListener = e -> evaluateURL();
 
         Composite addrGroup = new Composite(composite, SWT.NONE);
@@ -70,8 +65,12 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
         addrGroup.setLayoutData(gd);
 
         {
-            Group hostGroup = UIUtils.createControlGroup(addrGroup,
-                    OceanbaseMessages.oceanbase_connection_page_label_connection, 4, GridData.FILL_HORIZONTAL, 0);
+            Composite hostGroup = UIUtils.createTitledComposite(
+                addrGroup,
+                OceanbaseMessages.oceanbase_connection_page_label_connection,
+                4,
+                GridData.FILL_HORIZONTAL
+            );
 
             Label hostLabel = UIUtils.createControlLabel(hostGroup,
                     OceanbaseMessages.oceanbase_connection_page_label_host);
@@ -81,6 +80,7 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
             gd = new GridData(GridData.FILL_HORIZONTAL);
             gd.grabExcessHorizontalSpace = true;
             hostText.setLayoutData(gd);
+            UIUtils.setDefaultTextControlWidthHint(hostText);
             hostText.addModifyListener(textListener);
 
             Label portLabel = UIUtils.createControlLabel(hostGroup,
@@ -103,6 +103,7 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
             gd.grabExcessHorizontalSpace = true;
             gd.horizontalSpan = 3;
             databaseText.setLayoutData(gd);
+            UIUtils.setDefaultTextControlWidthHint(databaseText);
             databaseText.addModifyListener(textListener);
 
             Label tenantLabel = UIUtils.createControlLabel(hostGroup,
@@ -114,6 +115,7 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
             gd.grabExcessHorizontalSpace = true;
             gd.horizontalSpan = 3;
             tenantText.setLayoutData(gd);
+            UIUtils.setDefaultTextControlWidthHint(tenantText);
             tenantText.addModifyListener(textListener);
         }
 
@@ -155,7 +157,7 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
     }
 
     @Override
-    public void saveSettings(DBPDataSourceContainer dataSource) {
+    public void saveSettings(@NotNull DBPDataSourceContainer dataSource) {
         DBPConnectionConfiguration connectionInfo = dataSource.getConnectionConfiguration();
         if (hostText != null) {
             connectionInfo.setHostName(hostText.getText().trim());
@@ -172,6 +174,7 @@ public class OceanbaseConnectionPage extends ConnectionPageWithAuth implements I
         super.saveSettings(dataSource);
     }
 
+    @Nullable
     @Override
     public IDialogPage[] getDialogPages(boolean extrasOnly, boolean forceCreate) {
         return new IDialogPage[] { new DriverPropertiesDialogPage(this) };

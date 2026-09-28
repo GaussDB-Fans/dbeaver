@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.*;
@@ -30,9 +31,11 @@ import org.jkiss.dbeaver.model.DBPImage;
 import org.jkiss.dbeaver.model.runtime.DBRRunnableWithProgress;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.UIIcon;
+import org.jkiss.dbeaver.ui.UIStyles;
 import org.jkiss.dbeaver.ui.internal.UIMessages;
 import org.jkiss.utils.CommonUtils;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -147,6 +150,8 @@ public class AutoRefreshControl {
         if (itemText != null) {
             autoRefreshButton.setText(itemText);
         }
+
+        UIStyles.fixToolBarForeground(toolbar);
         autoRefreshButton.addSelectionListener(new AutoRefreshMenuListener(autoRefreshButton, defAction));
         updateAutoRefreshToolbar();
 
@@ -211,22 +216,12 @@ public class AutoRefreshControl {
                 {
                     MenuItem mi = new MenuItem(schedulerMenu, SWT.NONE);
                     mi.setText(UIMessages.sql_editor_resultset_filter_panel_menu_customize);
-                    mi.addSelectionListener(new SelectionAdapter() {
-                        @Override
-                        public void widgetSelected(SelectionEvent e) {
-                            runCustomized();
-                        }
-                    });
+                    mi.addSelectionListener(SelectionListener.widgetSelectedAdapter(event -> runCustomized()));
 
                     mi = new MenuItem(schedulerMenu, SWT.NONE);
                     mi.setText(UIMessages.sql_editor_resultset_filter_panel_menu_stop);
                     mi.setEnabled(isAutoRefreshEnabled());
-                    mi.addSelectionListener(new SelectionAdapter() {
-                        @Override
-                        public void widgetSelected(SelectionEvent e) {
-                            enableAutoRefresh(false);
-                        }
-                    });
+                    mi.addSelectionListener(SelectionListener.widgetSelectedAdapter(event -> enableAutoRefresh(false)));
                     new MenuItem(schedulerMenu, SWT.SEPARATOR);
 
                     List<Integer> presetList = new ArrayList<>();
@@ -240,19 +235,13 @@ public class AutoRefreshControl {
                     for (int i = 0; i < presetList.size(); i++) {
                         final Integer timeout = presetList.get(i);
                         mi = new MenuItem(schedulerMenu, SWT.PUSH);
-                        String text = i == 0 ?
-                            NLS.bind(UIMessages.sql_editor_resultset_filter_panel_menu_refresh_interval, timeout) :
-                            NLS.bind(UIMessages.sql_editor_resultset_filter_panel_menu_refresh_interval_1, timeout);
+                        String pattern = i == 0 ? UIMessages.sql_editor_resultset_filter_panel_menu_refresh_interval : UIMessages.sql_editor_resultset_filter_panel_menu_refresh_interval_1;
+                        String text = MessageFormat.format(pattern, timeout);
                         mi.setText(text);
                         if (isAutoRefreshEnabled() && timeout == defaultInterval) {
                             schedulerMenu.setDefaultItem(mi);
                         }
-                        mi.addSelectionListener(new SelectionAdapter() {
-                            @Override
-                            public void widgetSelected(SelectionEvent e) {
-                                runPreset(timeout);
-                            }
-                        });
+                        mi.addSelectionListener(SelectionListener.widgetSelectedAdapter(event -> runPreset(timeout)));
                     }
                 }
                 if (hintSupplier != null) {

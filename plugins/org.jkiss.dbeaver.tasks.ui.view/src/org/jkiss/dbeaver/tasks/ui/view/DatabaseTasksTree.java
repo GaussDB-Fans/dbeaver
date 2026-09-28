@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package org.jkiss.dbeaver.tasks.ui.view;
 
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
-import org.eclipse.jface.resource.ColorRegistry;
 import org.eclipse.jface.viewers.*;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.dnd.*;
@@ -29,11 +28,13 @@ import org.eclipse.swt.widgets.Item;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.ui.dialogs.PatternFilter;
+import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBIcon;
 import org.jkiss.dbeaver.model.DBPImage;
+import org.jkiss.dbeaver.model.DBPObjectWithOrdinalPosition;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.app.DBPProject;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
@@ -45,9 +46,7 @@ import org.jkiss.dbeaver.registry.task.TaskRegistry;
 import org.jkiss.dbeaver.registry.timezone.TimezoneRegistry;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.tasks.ui.internal.TaskUIViewMessages;
-import org.jkiss.dbeaver.ui.DBeaverIcons;
-import org.jkiss.dbeaver.ui.DefaultViewerToolTipSupport;
-import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.*;
 import org.jkiss.dbeaver.ui.controls.ViewerColumnController;
 import org.jkiss.dbeaver.ui.dialogs.DialogUtils;
 import org.jkiss.dbeaver.utils.GeneralUtils;
@@ -56,7 +55,6 @@ import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.io.IOException;
-import java.text.Collator;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -80,9 +78,8 @@ public class DatabaseTasksTree {
     public DatabaseTasksTree(Composite composite, boolean selector) {
         dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()); //$NON-NLS-1$
         dateFormat.setTimeZone(TimeZone.getTimeZone(TimezoneRegistry.getUserDefaultTimezone()));
-        ColorRegistry colorRegistry = UIUtils.getActiveWorkbenchWindow().getWorkbench().getThemeManager().getCurrentTheme().getColorRegistry();
-        colorError = colorRegistry.get("org.jkiss.dbeaver.txn.color.reverted.background");
-        colorErrorForeground = UIUtils.getContrastColor(colorError);
+        colorError = BaseThemeSettings.instance.colorError;
+        colorErrorForeground = UIStyles.getContrastColor(colorError);
         
         taskViewer = DialogUtils.createFilteredTree(composite,
             SWT.MULTI | SWT.FULL_SELECTION | (selector ? SWT.BORDER | SWT.CHECK : SWT.NONE),
@@ -92,10 +89,16 @@ public class DatabaseTasksTree {
         taskTree.setLayoutData(new GridData(GridData.FILL_BOTH));
 
         taskColumnController = new ViewerColumnController<>(TaskUIViewMessages.db_tasks_tree_column_controller_tasks, taskViewer);
-        taskColumnController.setComparator(new ViewerColumnController.DefaultComparator(Collator.getInstance()) {
+        taskColumnController.setComparator(new ViewerColumnController.DefaultComparator() {
             @Override
             public int category(Object element) {
                 return element instanceof DBTTaskFolder ? 0 : 1;
+            }
+
+            @Nullable
+            @Override
+            protected Integer getPosition(@Nullable Object element) {
+                return element instanceof DBPObjectWithOrdinalPosition o ? o.getOrdinalPosition() : null;
             }
         });
         taskColumnController.addColumn(TaskUIViewMessages.db_tasks_tree_column_controller_add_name, TaskUIViewMessages.db_tasks_tree_column_controller_add_descr_name, SWT.LEFT, true, true, new TaskLabelProvider() {
@@ -186,11 +189,7 @@ public class DatabaseTasksTree {
                     if (lastRun == null) {
                         return "N/A";
                     } else {
-                        if (lastRun.isRunSuccess()) {
-                            return TaskUIViewMessages.db_tasks_tree_column_cell_text_success;
-                        } else {
-                            return CommonUtils.notEmpty(lastRun.getErrorMessage());
-                        }
+                        return DatabaseTasksView.getBriefStatus(lastRun);
                     }
                 }
                 return null;
@@ -433,10 +432,13 @@ public class DatabaseTasksTree {
     }
 
     private void refreshTasks() {
+        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
+        if (project == null) {
+            return;
+        }
         allTasks.clear();
         allTasksFolders.clear();
 
-        DBPProject project = DBWorkbench.getPlatform().getWorkspace().getActiveProject();
         DBTTaskManager taskManager = project.getTaskManager();
         DBTTask[] tasks = taskManager.getAllTasks();
         if (tasks.length != 0) {
@@ -468,8 +470,9 @@ public class DatabaseTasksTree {
         DBTScheduler scheduler = TaskRegistry.getInstance().getActiveSchedulerInstance();
         if (scheduler != null) {
             new AbstractJob("Refresh scheduled tasks") {
+                @NotNull
                 @Override
-                protected IStatus run(DBRProgressMonitor monitor) {
+                protected IStatus run(@NotNull DBRProgressMonitor monitor) {
 
                     try {
                         scheduler.refreshScheduledTasks(monitor);
@@ -655,7 +658,7 @@ public class DatabaseTasksTree {
         }
     }
 
-    public class NamedObjectPatternFilter extends PatternFilter {
+    public static class NamedObjectPatternFilter extends PatternFilter {
         NamedObjectPatternFilter() {
             setIncludeLeadingWildcard(true);
         }
@@ -871,7 +874,7 @@ public class DatabaseTasksTree {
 
             private void handleDragEvent(DropTargetEvent event) {
                 event.detail = isDropSupported(event) ? DND.DROP_MOVE : DND.DROP_NONE;
-                event.feedback = DND.FEEDBACK_SELECT;
+                event.feedback = DND.FEEDBACK_SELECT | DND.FEEDBACK_SCROLL;
             }
 
             private boolean isDropSupported(DropTargetEvent event) {

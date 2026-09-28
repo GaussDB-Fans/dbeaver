@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@ package org.jkiss.dbeaver.ui.dialogs;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.layout.LayoutConstants;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -46,6 +45,8 @@ final class MessageBoxModern extends BaseDialog {
     private DBPImage primaryImage;
     @Nullable
     private Consumer<? super Composite> customArea;
+    @Nullable
+    private Consumer<? super Composite> customButton;
 
     @Nullable
     private List<Button> buttons;
@@ -72,6 +73,10 @@ final class MessageBoxModern extends BaseDialog {
     
     void setCustomArea(Consumer<? super Composite> customArea) {
         this.customArea = customArea;
+    }
+
+    void setCustomButton(@NotNull Consumer<? super Composite> customButton) {
+        this.customButton = customButton;
     }
 
     // ----- jface.Dialog methods
@@ -129,12 +134,7 @@ final class MessageBoxModern extends BaseDialog {
                 Link messageLink = new Link(content, SWT.WRAP);
                 messageLink.setText(message);
                 messageLink.setLayoutData(gd);
-                messageLink.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        ShellUtils.launchProgram(e.text);
-                    }
-                });
+                messageLink.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> ShellUtils.launchProgram(e.text)));
             } else {
                 Label messageLabel = new Label(content, SWT.WRAP);
                 messageLabel.setText(message);
@@ -167,6 +167,9 @@ final class MessageBoxModern extends BaseDialog {
         gd.horizontalAlignment = SWT.END;
         composite.setLayoutData(gd);
         composite.setFont(parent.getFont());
+        if (customButton != null) {
+            customButton.accept(composite);
+        }
         createButtonsForButtonBar(composite);
         return composite;
     }

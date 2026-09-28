@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,8 +40,9 @@ public class DatabaseObjectsTreeManager implements ICheckStateListener {
     private final DBRRunnableContext runnableContext;
     private final CheckboxTreeViewer viewer;
     private final Class<?>[] targetTypes;
-    private IdentityHashMap<Object, Boolean> checkedElements = new IdentityHashMap<>();
+    private final IdentityHashMap<Object, Boolean> checkedElements = new IdentityHashMap<>();
     private final ViewerFilter[] filters;
+    private boolean autoCheckNested = true;
 
     private static class CollectInfo {
         DBNNode rootElement;
@@ -58,16 +59,31 @@ public class DatabaseObjectsTreeManager implements ICheckStateListener {
         viewer.addCheckStateListener(this);
     }
 
+    public boolean isAutoCheckNested() {
+        return autoCheckNested;
+    }
+
+    public void setAutoCheckNested(boolean autoCheckNested) {
+        this.autoCheckNested = autoCheckNested;
+    }
+
     @Override
     public void checkStateChanged(final CheckStateChangedEvent event) {
         updateElementsCheck(
             new Object[] {event.getElement()},
             event.getChecked(),
-            true);
+            true,
+            false);
     }
 
-    private void updateElementsCheck(final Object[] elements, final boolean checked, final boolean change) {
+    public void updateElementsCheck(Object[] elements, boolean checked, boolean change, boolean forceNestedCheck) {
         checkedElements.clear();
+        if (!autoCheckNested && !forceNestedCheck) {
+            for (Object element : viewer.getCheckedElements()) {
+                checkedElements.put(element, Boolean.TRUE);
+            }
+            return;
+        }
         boolean inWizard = UIUtils.isInWizard(viewer.getControl());
         try {
             runnableContext.run(!inWizard, true, (monitor -> {
@@ -82,17 +98,19 @@ public class DatabaseObjectsTreeManager implements ICheckStateListener {
                         CollectInfo collectInfo = new CollectInfo();
                         collectInfo.rootElement = node;
                         collectInfo.wasChecked = checked;
-                        updateElementHierarchy(monitor, node, collectInfo, change);
-
-                        if (change) {
-                            // Update parent state
-                            for (DBNNode parent = ((DBNNode) element).getParentNode(); parent != null; parent = parent.getParentNode()) {
-                                updateElementHierarchy(monitor, parent, collectInfo, false);
-                                if (parent instanceof DBNDataSource) {
-                                    break;
+                        if (autoCheckNested || forceNestedCheck) {
+                            updateElementHierarchy(monitor, node, collectInfo, change);
+                            if (change) {
+                                // Update parent state
+                                for (DBNNode parent = ((DBNNode) element).getParentNode(); parent != null; parent = parent.getParentNode()) {
+                                    updateElementHierarchy(monitor, parent, collectInfo, false);
+                                    if (parent instanceof DBNDataSource) {
+                                        break;
+                                    }
                                 }
                             }
                         }
+
                         monitor.worked(1);
                     }
                 } catch (DBException e) {
@@ -219,6 +237,9 @@ public class DatabaseObjectsTreeManager implements ICheckStateListener {
     }
 
     public void updateCheckStates() {
+        if (!autoCheckNested) {
+            return;
+        }
         Set<DBNNode> parentList = new LinkedHashSet<>();
         for (Object element : viewer.getCheckedElements()) {
             for (DBNNode node = ((DBNNode)element).getParentNode(); node != null; node = node.getParentNode()) {
@@ -226,6 +247,6 @@ public class DatabaseObjectsTreeManager implements ICheckStateListener {
                 viewer.setChecked(node, true);
             }
         }
-        updateElementsCheck(parentList.toArray(), true, false);
+        updateElementsCheck(parentList.toArray(), true, false, false);
     }
 }

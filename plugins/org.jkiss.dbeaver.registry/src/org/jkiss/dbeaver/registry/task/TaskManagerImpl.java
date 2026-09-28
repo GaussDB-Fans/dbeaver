@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -313,6 +314,7 @@ public class TaskManagerImpl implements DBTTaskManager {
     @Override
     public DBTTaskRunStatus runTask(@NotNull DBRProgressMonitor monitor, @NotNull DBTTask task, @NotNull DBTTaskExecutionListener listener) throws DBException {
         final TaskRunJob job = createJob((TaskImpl) task, listener);
+        log.debug("Submitting " + job.getExecutionDescription() + " for direct execution");
         if (serviceJob == null) {
             serviceJob = new ServiceJob();
             serviceJob.schedule();
@@ -334,8 +336,9 @@ public class TaskManagerImpl implements DBTTaskManager {
 
     @NotNull
     @Override
-    public TaskRunJob scheduleTask(@NotNull DBTTask task, @NotNull DBTTaskExecutionListener listener) {
+    public TaskRunJob scheduleTask(@NotNull DBTTask task, @NotNull DBTTaskExecutionListener listener) throws DBException {
         final TaskRunJob runJob = createJob((TaskImpl) task, listener);
+        log.debug("Submitting " + runJob.getExecutionDescription() + " for background execution");
         runJob.schedule();
         if (serviceJob == null) {
             serviceJob = new ServiceJob();
@@ -410,7 +413,7 @@ public class TaskManagerImpl implements DBTTaskManager {
                     String taskFolderName = JSONUtils.getString(taskJSON, TaskConstants.TAG_TASK_FOLDER);
                     Date createTime = systemDateFormat.parse(JSONUtils.getString(taskJSON, TaskConstants.TAG_CREATE_TIME));
                     Date updateTime = systemDateFormat.parse(JSONUtils.getString(taskJSON, TaskConstants.TAG_UPDATE_TIME));
-                    int maxExecutionTime = JSONUtils.getInteger(taskJSON, TaskConstants.TAG_MAX_EXEC_TIME);
+                    Duration maxExecutionTime = Duration.ofSeconds(JSONUtils.getInteger(taskJSON, TaskConstants.TAG_MAX_EXEC_TIME));
                     Map<String, Object> state = JSONUtils.getObject(taskJSON, TaskConstants.TAG_STATE);
 
                     DBTTaskType taskDescriptor = getRegistry().getTaskType(task);
@@ -430,7 +433,9 @@ public class TaskManagerImpl implements DBTTaskManager {
                         taskFolder,
                         state
                     );
+
                     taskConfig.setMaxExecutionTime(maxExecutionTime);
+
                     if (taskFolder != null) {
                         taskFolder.addTaskToFolder(taskConfig);
                         if (!tasksFolders.contains(taskFolder)) {
@@ -534,6 +539,10 @@ public class TaskManagerImpl implements DBTTaskManager {
         saveConfiguration();
     }
 
+    protected void cancelJobIfNeeded(@NotNull TaskRunJob job) {
+        // does nothing.
+    }
+
     private void serializeTasks(@NotNull JsonWriter jsonWriter) throws IOException {
         jsonWriter.setIndent("\t");
         jsonWriter.beginObject();
@@ -562,10 +571,10 @@ public class TaskManagerImpl implements DBTTaskManager {
             }
             JSONUtils.field(jsonWriter, TaskConstants.TAG_CREATE_TIME, systemDateFormat.format(task.getCreateTime()));
             JSONUtils.field(jsonWriter, TaskConstants.TAG_UPDATE_TIME, systemDateFormat.format(task.getUpdateTime()));
-            JSONUtils.serializeProperties(jsonWriter, TaskConstants.TAG_STATE, task.getProperties(), true);
-            if (task.getMaxExecutionTime() > 0) {
-                JSONUtils.field(jsonWriter, TaskConstants.TAG_MAX_EXEC_TIME, task.getMaxExecutionTime());
+            if (task.getMaxExecutionTime().isPositive()) {
+                JSONUtils.field(jsonWriter, TaskConstants.TAG_MAX_EXEC_TIME, task.getMaxExecutionTime().toSeconds());
             }
+            JSONUtils.serializeProperties(jsonWriter, TaskConstants.TAG_STATE, task.getProperties(), true);
             jsonWriter.endObject();
         }
         jsonWriter.endObject();
@@ -586,7 +595,7 @@ public class TaskManagerImpl implements DBTTaskManager {
                 if (taskJob.isFinished() || taskJob.isCanceled()) {
                     continue;
                 }
-                taskJob.cancelByTimeReached();
+                cancelJobIfNeeded(taskJob);
             }
             schedule(TASK_SLEEP_TIME);
             return Status.OK_STATUS;

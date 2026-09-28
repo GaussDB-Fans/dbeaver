@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,48 @@
  */
 package org.jkiss.dbeaver.ext.mysql.model;
 
-import org.junit.Assert;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-@RunWith(MockitoJUnitRunner.class)
-public class MySQLDialectTest {
+public class MySQLDialectTest extends DBeaverUnitTest {
+
+    private final MySQLDialect dialect = new MySQLDialect();
+
     @Test
     public void quoteStringTest() {
-        final MySQLDialect dialect = new MySQLDialect();
+        Assertions.assertEquals("`a ' b`", dialect.getQuotedIdentifier("a ' b", false, true));
+        Assertions.assertEquals("`a `` b`", dialect.getQuotedIdentifier("a ` b", false, true));
+        Assertions.assertEquals("`a b`", dialect.getQuotedIdentifier("a b", false, true));
+    }
 
-        Assert.assertEquals("`a ' b`", dialect.getQuotedIdentifier("a ' b", false, true));
-        Assert.assertEquals("`a `` b`", dialect.getQuotedIdentifier("a ` b", false, true));
-        Assert.assertEquals("`a b`", dialect.getQuotedIdentifier("a b", false, true));
+    @Test
+    public void escapeString_whenSimpleStringPasses_thenSameStringReturn(){
+        // GIVEN
+        String expected = "There is simple string without any quotes and slashes";
+        // WHEN
+        String actual = dialect.escapeString(expected);
+        // THEN
+        Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void escapeString_whenStringWithQuotes_thenSameStringReturn() {
+        // GIVEN
+        String given = "[\"{\"subjectId\":3,\"levelId\":2,\"isOur\":true}\"]";
+        // WHEN
+        String actual = dialect.escapeString(given);
+        // THEN
+        Assertions.assertEquals("[\"{\"subjectId\":3,\"levelId\":2,\"isOur\":true}\"]", actual);
+    }
+
+    @Test
+    public void escapeString_whenStringWithinSlash_thenStringEscapedSlashReturn() {
+        // GIVEN
+        String given = "[\"{\\\"subjectId\\\":3,\\\"levelId\\\":2,\\\"isOur\\\":true}\"]";
+        // WHEN
+        String actual = dialect.escapeString(given);
+        // THEN
+        Assertions.assertEquals("[\"{\\\\\"subjectId\\\\\":3,\\\\\"levelId\\\\\":2,\\\\\"isOur\\\\\":true}\"]", actual);
     }
 }

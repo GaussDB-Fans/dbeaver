@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,12 +48,16 @@ public abstract class JDBCAttribute extends AbstractAttribute implements DBSObje
 
     @Nullable
     @Override
-    public DBPImage getObjectImage()
-    {
+    public DBPImage getObjectImage() {
+        return getObjectImage(true);
+    }
+
+    @Nullable
+    @Override
+    public DBPImage getObjectImage(boolean includeModifiers) {
         DBPImage columnImage = DBValueFormatting.getTypeImage(this);
-        JDBCColumnKeyType keyType = getKeyType();
-        if (keyType != null) {
-            columnImage = getOverlayImage(columnImage, keyType);
+        if (includeModifiers) {
+            columnImage = getOverlayImage(columnImage, getKeyType());
         }
         return columnImage;
     }
@@ -71,8 +75,8 @@ public abstract class JDBCAttribute extends AbstractAttribute implements DBSObje
         return JDBCUtils.resolveDataKind(getDataSource(), typeName, valueType);
     }
 
-    protected static DBPImage getOverlayImage(DBPImage columnImage, JDBCColumnKeyType keyType)
-    {
+    @NotNull
+    protected static DBPImage getOverlayImage(@NotNull DBPImage columnImage, @Nullable JDBCColumnKeyType keyType) {
         if (keyType == null || !(keyType.isInUniqueKey() || keyType.isInReferenceKey())) {
             return columnImage;
         }

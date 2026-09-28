@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,6 +59,11 @@ public class GridColumn implements IGridColumn {
     private int height = -1;
     private int pinIndex = -1;
 
+    public static class HintsInfo {
+        List<DBPImage> icons = new ArrayList<>();
+        boolean readOnly;
+    }
+
     public GridColumn(LightGrid grid, Object element) {
         this.grid = grid;
         this.element = element;
@@ -101,6 +106,7 @@ public class GridColumn implements IGridColumn {
      *
      * @return width of column
      */
+    @Override
     public int getWidth() {
         return width;
     }
@@ -126,6 +132,7 @@ public class GridColumn implements IGridColumn {
         }
     }
 
+    @Override
     public boolean isPinned() {
         return pinIndex >= 0 || parent != null && parent.isPinned();
     }
@@ -217,6 +224,14 @@ public class GridColumn implements IGridColumn {
         if (image != null) {
             x += image.getBounds().width + imageSpacing;
         }
+        HintsInfo hint = getHintInfo();
+        if (!hint.icons.isEmpty()) {
+            int maxIconWidth = GridColumnRenderer.IMAGE_SPACING;
+            for (DBPImage hi : hint.icons) {
+                maxIconWidth = Math.max(maxIconWidth, DBeaverIcons.getImage(hi).getBounds().width);
+            }
+            x += maxIconWidth;
+        }
         {
             int textWidth;
             if (Boolean.TRUE.equals(labelProvider.getGridOption(IGridLabelProvider.OPTION_EXCLUDE_COLUMN_NAME_FOR_WIDTH_CALC))) {
@@ -268,12 +283,24 @@ public class GridColumn implements IGridColumn {
             // Calculate width of visible cells
             int topIndex = grid.getTopIndex();
             int bottomIndex = grid.getBottomIndex();
+            int maxValueWidth = 0;
             if (topIndex >= 0 && bottomIndex >= topIndex) {
                 int itemCount = grid.getItemCount();
                 for (int i = topIndex; i <= bottomIndex && i < itemCount; i++) {
-                    newWidth = Math.max(newWidth, computeCellWidth(gc, grid.getRow(i)));
+                    maxValueWidth = Math.max(maxValueWidth, computeCellWidth(gc, grid.getRow(i)));
+                    newWidth = Math.max(newWidth, maxValueWidth);
                 }
             }
+            // Respect hints
+            int columnHintsWidth = grid.getContentProvider().getColumnHintsWidth(this);
+            if (columnHintsWidth > 0) {
+                if (columnHintsWidth > 16) columnHintsWidth= 16;
+                int newValueWidth = maxValueWidth + columnHintsWidth * gc.stringExtent("x").x;
+                if (newValueWidth > newWidth) {
+                    newWidth = newValueWidth;
+                }
+            }
+
         } else {
             int childrenWidth = 0;
             for (GridColumn child : children) {
@@ -282,7 +309,7 @@ public class GridColumn implements IGridColumn {
             }
             if (newWidth > childrenWidth) {
                 // Header width bigger than children width
-                GridColumn lastChild = children.get(children.size() - 1);
+                GridColumn lastChild = children.getLast();
                 lastChild.setWidth(lastChild.getWidth() + newWidth - childrenWidth);
             } else {
                 newWidth = childrenWidth;
@@ -360,6 +387,29 @@ public class GridColumn implements IGridColumn {
         return tip;
     }
 
+    @Nullable
+    protected List<IGridHint> getColumnHints() {
+        return grid.getContentProvider().getColumnHints(this, 0);
+    }
+
+    HintsInfo getHintInfo() {
+        List<IGridHint> columnHints = getColumnHints();
+        HintsInfo info = new HintsInfo();
+        if (columnHints != null) {
+            for (IGridHint hint : columnHints) {
+                DBPImage icon = hint.getIcon();
+                if (icon != null) {
+                    info.icons.add(icon);
+                }
+                if (hint.isReadOnly()) {
+                    info.readOnly = true;
+                }
+            }
+        }
+        return info;
+    }
+
+
     @Override
     public GridColumn getParent() {
         return parent;
@@ -394,7 +444,7 @@ public class GridColumn implements IGridColumn {
         if (children == null) {
             return this;
         } else {
-            return children.get(0).getFirstLeaf();
+            return children.getFirst().getFirstLeaf();
         }
     }
 

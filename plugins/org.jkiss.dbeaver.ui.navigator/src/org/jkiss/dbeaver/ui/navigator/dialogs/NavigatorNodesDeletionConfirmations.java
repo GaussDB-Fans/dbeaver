@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,7 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.code.NotNull;
@@ -133,31 +132,23 @@ public final class NavigatorNodesDeletionConfirmations {
     private static void createObjectsTable(@NotNull Composite parent, @NotNull Collection<?> selectedObjects) {
         Composite placeholder = UIUtils.createComposite(parent, 1);
         placeholder.setLayoutData(new GridData(GridData.FILL_BOTH));
-        Group tableGroup = UIUtils.createControlGroup(
+        Composite tableGroup = UIUtils.createTitledComposite(
             placeholder,
             UINavigatorMessages.confirm_deleting_multiple_objects_table_group_name,
             1,
-            GridData.FILL_BOTH,
-            0
+            GridData.FILL_BOTH
         );
         tableGroup.setLayoutData(new GridData(GridData.FILL_BOTH));
         Table objectsTable = new Table(tableGroup, SWT.BORDER | SWT.FULL_SELECTION);
         objectsTable.setHeaderVisible(true);
         objectsTable.setLinesVisible(true);
-        GridData gd = new GridData(GridData.FILL_BOTH);
-        int fontHeight = UIUtils.getFontHeight(objectsTable);
-        int rowCount = selectedObjects.size();
-        gd.widthHint = fontHeight * 7;
-        //gd.heightHint = rowCount < 6 ? fontHeight * 2 * rowCount : fontHeight * 10;
-        objectsTable.setLayoutData(gd);
         UIUtils.createTableColumn(objectsTable, SWT.LEFT, UINavigatorMessages.confirm_deleting_multiple_objects_column_name);
         UIUtils.createTableColumn(objectsTable, SWT.LEFT, "Type");
         UIUtils.createTableColumn(objectsTable, SWT.LEFT, UINavigatorMessages.confirm_deleting_multiple_objects_column_description);
         for (Object obj: selectedObjects) {
-            if (!(obj instanceof DBNNode)) {
+            if (!(obj instanceof DBNNode node)) {
                 continue;
             }
-            DBNNode node = (DBNNode) obj;
             TableItem item = new TableItem(objectsTable, SWT.NONE);
             item.setImage(DBeaverIcons.getImage(node.getNodeIcon()));
             if (node.getAdapter(IResource.class) != null) {
@@ -172,6 +163,12 @@ public final class NavigatorNodesDeletionConfirmations {
                 item.setText(2, CommonUtils.toString(node.getNodeDescription()));
             }
         }
+
+        GridData gd = new GridData(GridData.FILL_BOTH);
+        gd.widthHint = UIUtils.getFontHeight(objectsTable) * 7;
+        gd.heightHint = objectsTable.getHeaderHeight() + objectsTable.getItemHeight() * Math.min(10, objectsTable.getItemCount());
+        objectsTable.setLayoutData(gd);
+
         UIUtils.asyncExec(() -> UIUtils.packColumns(objectsTable, true));
     }
 
@@ -191,12 +188,8 @@ public final class NavigatorNodesDeletionConfirmations {
             false,
             2
         );
-        deleteContentsCheck.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                deleter.setDeleteContents(deleteContentsCheck.getSelection());
-            }
-        });
+        deleteContentsCheck.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+            deleter.setDeleteContents(deleteContentsCheck.getSelection())));
         UIUtils.createLabelText(ph,
             UINavigatorMessages.confirm_deleting_project_location_label,
             project.getLocation().toFile().getAbsolutePath(),
@@ -211,16 +204,13 @@ public final class NavigatorNodesDeletionConfirmations {
     ) {
         Composite placeholder = UIUtils.createPlaceholder(checkboxesComposite, 1, 5);
         Button checkbox = UIUtils.createCheckbox(placeholder, option.getLabel(), option.getTip(), false, 0);
-        checkbox.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        checkbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 if (checkbox.getSelection()) {
                     deleter.enableOption(option);
                 } else {
                     deleter.disableOption(option);
                 }
-            }
-        });
+            }));
     }
 
     private NavigatorNodesDeletionConfirmations() {

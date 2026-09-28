@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.registry.maven.*;
 import org.jkiss.utils.CommonUtils;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -38,8 +37,7 @@ import java.util.List;
 /**
  * DriverLibraryDescriptor
  */
-public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
-{
+public class DriverLibraryMavenArtifact extends DriverLibraryAbstract {
     private static final Log log = Log.getLog(DriverLibraryMavenArtifact.class);
 
     public static final String PATH_PREFIX = "maven:/";
@@ -49,44 +47,76 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
     private String preferredVersion;
     private boolean ignoreDependencies;
     private boolean loadOptionalDependencies;
+    private final MavenArtifactReference originalReference;
     private final String originalPreferredVersion;
+    private final boolean originalIgnoreDependencies;
+    private final boolean originalLoadOptionalDependencies;
+    private boolean forcedVersion;
 
-    public DriverLibraryMavenArtifact(DriverDescriptor driver, FileType type, String path, String preferredVersion) {
+    public DriverLibraryMavenArtifact(
+        @NotNull DriverDescriptor driver,
+        @NotNull FileType type,
+        @NotNull String path,
+        @Nullable String preferredVersion
+    ) {
         super(driver, type, path);
         initArtifactReference(preferredVersion);
+        this.originalReference = copyReference(this.reference);
         this.originalPreferredVersion = this.preferredVersion;
+        this.originalIgnoreDependencies = this.ignoreDependencies;
+        this.originalLoadOptionalDependencies = this.loadOptionalDependencies;
     }
 
-    public DriverLibraryMavenArtifact(DriverDescriptor driver, IConfigurationElement config) {
+    public DriverLibraryMavenArtifact(@NotNull DriverDescriptor driver, @NotNull IConfigurationElement config) {
         super(driver, config);
         ignoreDependencies = CommonUtils.toBoolean(config.getAttribute("ignore-dependencies"));
         loadOptionalDependencies = CommonUtils.toBoolean(config.getAttribute("load-optional-dependencies"));
         initArtifactReference(null);
+        this.originalReference = copyReference(this.reference);
         this.originalPreferredVersion = this.preferredVersion;
+        this.originalIgnoreDependencies = this.ignoreDependencies;
+        this.originalLoadOptionalDependencies = this.loadOptionalDependencies;
     }
 
-    private DriverLibraryMavenArtifact(DriverDescriptor driver, DriverLibraryMavenArtifact copyFrom) {
+    private DriverLibraryMavenArtifact(@NotNull DriverDescriptor driver, @NotNull DriverLibraryMavenArtifact copyFrom) {
         super(driver, copyFrom);
-        this.reference = copyFrom.reference;
+        this.reference = copyReference(copyFrom.reference);
+        this.reference.setResolveOptionalDependencies(copyFrom.loadOptionalDependencies);
         this.localVersion = copyFrom.localVersion;
         this.preferredVersion = copyFrom.preferredVersion;
         this.ignoreDependencies = copyFrom.ignoreDependencies;
         this.loadOptionalDependencies = copyFrom.loadOptionalDependencies;
 
+        this.originalReference = copyReference(copyFrom.originalReference);
         this.originalPreferredVersion = copyFrom.originalPreferredVersion;
+        this.originalIgnoreDependencies = copyFrom.originalIgnoreDependencies;
+        this.originalLoadOptionalDependencies = copyFrom.originalLoadOptionalDependencies;
     }
 
+    @NotNull
+    private static MavenArtifactReference copyReference(@NotNull MavenArtifactReference reference) {
+        return new MavenArtifactReference(
+            reference.getGroupId(),
+            reference.getArtifactId(),
+            reference.getClassifier(),
+            reference.getFallbackVersion(),
+            reference.getVersion()
+        );
+    }
+
+    @Nullable
     public MavenArtifactReference getReference() {
         return reference;
     }
 
-    public void setReference(MavenArtifactReference reference) {
+    public void setReference(@NotNull MavenArtifactReference reference) {
         this.reference = reference;
+        this.reference.setResolveOptionalDependencies(loadOptionalDependencies);
         this.path = PATH_PREFIX + reference.toString();
         this.localVersion = null;
     }
 
-    private void initArtifactReference(String preferredVersion) {
+    private void initArtifactReference(@Nullable String preferredVersion) {
         if (path.endsWith("]")) {
             int divPos = path.lastIndexOf('[');
             if (divPos != -1) {
@@ -106,8 +136,7 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
     }
 
     @Override
-    public String getDescription()
-    {
+    public String getDescription() {
         if (localVersion != null) {
             return localVersion.getDescription();
         }
@@ -115,12 +144,19 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
     }
 
     @Override
-    public boolean isDownloadable()
-    {
-        if (localVersion != null) {
-            //return !"pom".equals(localVersion.getPackaging());
-        }
+    public boolean isDownloadable() {
         return true;
+    }
+
+    /**
+     * If true then library version was forcibly set by user. Do not upgrade it automatically.
+     */
+    public boolean isForcedVersion() {
+        return forcedVersion;
+    }
+
+    public void setForcedVersion(boolean forcedVersion) {
+        this.forcedVersion = forcedVersion;
     }
 
     public boolean isIgnoreDependencies() {
@@ -137,6 +173,7 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
 
     public void setLoadOptionalDependencies(boolean loadOptionalDependencies) {
         this.loadOptionalDependencies = loadOptionalDependencies;
+        this.reference.setResolveOptionalDependencies(loadOptionalDependencies);
     }
 
     @NotNull
@@ -157,8 +194,7 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
         return preferredVersion;
     }
 
-    @Override
-    public void setPreferredVersion(@NotNull String version) {
+    public void setPreferredVersion(@Nullable String version) {
         this.preferredVersion = version;
         this.localVersion = null;
     }
@@ -168,11 +204,18 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
         return localVersion == null || localVersion.isInvalidVersion();
     }
 
-    @Override
     public void resetVersion() {
         this.localVersion = null;
         this.preferredVersion = originalPreferredVersion;
         MavenRegistry.getInstance().resetArtifactInfo(reference);
+    }
+
+    public void resetToDefaults() {
+        this.ignoreDependencies = originalIgnoreDependencies;
+        this.loadOptionalDependencies = originalLoadOptionalDependencies;
+        this.forcedVersion = false;
+        setReference(copyReference(originalReference));
+        resetVersion();
     }
 
     @Override
@@ -199,7 +242,8 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
                     reference.getArtifactId(),
                     reference.getClassifier(),
                     reference.getFallbackVersion(),
-                    preferredVersion);
+                    preferredVersion
+                );
                 if (loadOptionalDependencies) {
                     ref.setResolveOptionalDependencies(true);
                 }
@@ -211,7 +255,7 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
 
     @Nullable
     @Override
-    public String getExternalURL(DBRProgressMonitor monitor) {
+    public String getExternalURL(@NotNull DBRProgressMonitor monitor) {
         MavenArtifactVersion localVersion = getArtifactVersion(monitor);
         if (localVersion != null) {
             return localVersion.getExternalURL();
@@ -222,20 +266,18 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
 
     @Nullable
     @Override
-    public Path getLocalFile()
-    {
+    public Path getLocalFile() {
         // Try to get local file
-        File platformFile = detectLocalFile();
+        Path platformFile = detectLocalFile();
         if (platformFile != null) {
-            // Relative file do not exists - use plain one
-            return platformFile.toPath();
+            // Relative file does not exist - use plain one
+            return platformFile;
         }
         // Nothing fits - just return plain url
         return null;
     }
 
-    private File detectLocalFile()
-    {
+    private Path detectLocalFile() {
         if (localVersion != null) {
             return localVersion.getCacheFile();
         }
@@ -246,10 +288,10 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
     @Override
     public Collection<? extends DBPDriverLibrary> getDependencies(@NotNull DBRProgressMonitor monitor) throws IOException {
         List<DriverLibraryMavenDependency> dependencies = new ArrayList<>();
+        MavenArtifactVersion localVersion = resolveLocalVersion(monitor, false);
         if (ignoreDependencies) {
             return dependencies;
         }
-        MavenArtifactVersion localVersion = resolveLocalVersion(monitor, false);
         if (localVersion != null) {
 
             List<MavenArtifactDependency> artifactDeps = localVersion.getDependencies();
@@ -265,7 +307,8 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
                             new DriverLibraryMavenDependency(
                                 this,
                                 depArtifact,
-                                dependency));
+                                dependency
+                            ));
                     } else {
                         dependency.setBroken(true);
                     }
@@ -309,19 +352,18 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
         return DBIcon.APACHE;
     }
 
-    public void downloadLibraryFile(@NotNull DBRProgressMonitor monitor, boolean forceUpdate, String taskName) throws IOException, InterruptedException {
+    public void downloadLibraryFile(
+        @NotNull DBRProgressMonitor monitor,
+        boolean forceUpdate,
+        @NotNull String taskName
+    ) throws IOException, InterruptedException {
         if (isInvalidLibrary()) {
             throw new IOException("Maven artifact '" + getDisplayName() + "' cannot be resolved in external repositores");
         }
-        //monitor.beginTask(taskName + " - update localVersion information", 1);
-        try {
-            MavenArtifactVersion localVersion = resolveLocalVersion(monitor, forceUpdate);
-            if (localVersion.getArtifact().getRepository().getType() == MavenRepository.RepositoryType.LOCAL) {
-                // No need to download local artifacts
-                return;
-            }
-        } finally {
-            //monitor.done();
+        MavenArtifactVersion localVersion = resolveLocalVersion(monitor, forceUpdate);
+        if (localVersion.getArtifact().getRepository().getType() == MavenRepository.RepositoryType.LOCAL) {
+            // No need to download local artifacts
+            return;
         }
         super.downloadLibraryFile(monitor, forceUpdate, taskName);
     }
@@ -336,8 +378,10 @@ public class DriverLibraryMavenArtifact extends DriverLibraryAbstract
         return null;
     }
 
+    @NotNull
     @Override
-    public DBPDriverLibrary copyLibrary(DriverDescriptor driverDescriptor) {
+    public DBPDriverLibrary copyLibrary(@NotNull DriverDescriptor driverDescriptor) {
+        assert driver != null;
         return new DriverLibraryMavenArtifact(driver, this);
     }
 

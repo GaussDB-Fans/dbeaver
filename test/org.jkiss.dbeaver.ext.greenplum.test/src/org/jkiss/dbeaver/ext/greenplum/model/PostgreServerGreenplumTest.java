@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,20 +22,18 @@ import org.jkiss.dbeaver.ext.postgresql.model.PostgreDialect;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreSchema;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCResultSet;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import java.sql.SQLException;
 
-@RunWith(MockitoJUnitRunner.class)
-public class PostgreServerGreenplumTest {
+public class PostgreServerGreenplumTest extends DBeaverUnitTest {
     @Mock
     GreenplumDataSource mockDataSource;
 
@@ -51,7 +49,7 @@ public class PostgreServerGreenplumTest {
     @InjectMocks
     PostgreServerGreenplum server;
 
-    @Before
+    @BeforeEach
     public void setup() throws SQLException {
         Mockito.when(mockSchema.getDataSource()).thenReturn(mockDataSource);
         Mockito.when(mockDataSource.isServerVersionAtLeast(ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt())).thenReturn(false);
@@ -62,7 +60,7 @@ public class PostgreServerGreenplumTest {
 
     @Test
     public void createRelationOfClass_whenTableIsNotAGreenplumTable_returnsInstanceOfPostgresTableBase() {
-        Assert.assertEquals(GreenplumTable.class,
+        Assertions.assertEquals(GreenplumTable.class,
                 server.createRelationOfClass(mockSchema, PostgreClass.RelKind.p, mockResults).getClass());
     }
 
@@ -70,7 +68,7 @@ public class PostgreServerGreenplumTest {
     public void createRelationOfClass_whenTableTypeIsRegularAndTableIsANonExternalGreenplumTable_returnsInstanceOfGreenplumTable()
             throws SQLException {
         Mockito.when(mockResults.getBoolean("is_ext_table")).thenReturn(false);
-        Assert.assertEquals(GreenplumTable.class,
+        Assertions.assertEquals(GreenplumTable.class,
                 server.createRelationOfClass(mockSchema, PostgreClass.RelKind.r, mockResults).getClass());
     }
 
@@ -78,8 +76,19 @@ public class PostgreServerGreenplumTest {
     public void createRelationOfClass_whenTableTypeIsRegularAndTableIsAnExternalGreenplumTable_returnsInstanceOfGreenplumExternalTable()
             throws SQLException {
         Mockito.when(mockResults.getBoolean("is_ext_table")).thenReturn(true);
-        Assert.assertEquals(GreenplumExternalTable.class,
+        Assertions.assertEquals(GreenplumExternalTable.class,
                 server.createRelationOfClass(mockSchema, PostgreClass.RelKind.r, mockResults).getClass());
+    }
+
+    @Test
+    public void createRelationOfClass_whenTableTypeIsForeignAndTableIsAnExternalGreenplumTable_returnsInstanceOfGreenplumExternalTable()
+            throws SQLException {
+        // Greenplum 7 / Cloudberry: external tables are stored as foreign tables
+        // backed by the gp_exttable_fdw FDW (pg_class.relkind = 'f'). The GreenplumTableCache
+        // still reports is_ext_table = true for them via the pg_exttable view.
+        Mockito.when(mockResults.getBoolean("is_ext_table")).thenReturn(true);
+        Assertions.assertEquals(GreenplumExternalTable.class,
+                server.createRelationOfClass(mockSchema, PostgreClass.RelKind.f, mockResults).getClass());
     }
 
     @Test
@@ -87,7 +96,7 @@ public class PostgreServerGreenplumTest {
             throws DBException {
         String expectedDelegatedResultFromParentClass = null;
         GreenplumTable table = Mockito.mock(GreenplumTable.class);
-        Assert.assertEquals(expectedDelegatedResultFromParentClass, server.readTableDDL(monitor, table));
+        Assertions.assertEquals(expectedDelegatedResultFromParentClass, server.readTableDDL(monitor, table));
     }
 
     @Test
@@ -104,15 +113,15 @@ public class PostgreServerGreenplumTest {
 
         server.configureDialect(dialect);
 
-        Assert.assertTrue(!dialect.getMatchedKeywords("DISTRIBUTED").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("SEGMENT").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("REJECT").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("FORMAT").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("MASTER").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("WEB").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("WRITABLE").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("READABLE").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("ERRORS").isEmpty());
-        Assert.assertTrue(!dialect.getMatchedKeywords("LOG").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("DISTRIBUTED").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("SEGMENT").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("REJECT").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("FORMAT").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("MASTER").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("WEB").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("WRITABLE").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("READABLE").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("ERRORS").isEmpty());
+        Assertions.assertTrue(!dialect.getMatchedKeywords("LOG").isEmpty());
     }
 }

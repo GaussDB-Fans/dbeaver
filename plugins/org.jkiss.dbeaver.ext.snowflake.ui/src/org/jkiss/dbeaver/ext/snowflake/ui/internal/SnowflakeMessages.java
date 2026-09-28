@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,18 +25,19 @@ public class SnowflakeMessages extends NLS {
 	public static String label_connection;
 	public static String label_database;
 	public static String label_host;
-	public static String label_password;
 	public static String label_port;
 	public static String label_role;
 	public static String label_schema;
 	public static String label_security;
-	public static String label_user;
 	public static String label_warehouse;
 
 	public static String dialog_setting_sql;
 	public static String dialog_setting_sql_dd_label;
 	public static String dialog_setting_sql_dd_string;
 	public static String dialog_setting_sql_dd_code_block;
+
+	public static String authenticator_snowflake_label;
+	public static String authenticator_external_browser_label;
 
 	static {
 		// initialize resource bundle

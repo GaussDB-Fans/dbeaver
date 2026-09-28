@@ -5,11 +5,13 @@
 
     <extension point="org.jkiss.dbeaver.dataManager">
         <manager class="org.jkiss.dbeaver.ext.clickhouse.ui.ClickhouseEnumValueManager" id="org.jkiss.dbeaver.ext.clickhouse.ui.ClickhouseEnumValueManager">
-            <supports dataSource="clickhouse" typeName="ENUM8"/>
-            <supports dataSource="clickhouse" typeName="ENUM16"/>
+            <supports dataSource="clickhouse" typeName="ENUM8*"/>
+            <supports dataSource="clickhouse" typeName="ENUM16*"/>
         </manager>
     </extension>
     <extension point="org.jkiss.dbeaver.ui.propertyConfigurator">
         <propertyConfigurator class="org.jkiss.dbeaver.ext.clickhouse.model.ClickhouseSSLImpl" uiClass="org.jkiss.dbeaver.ext.clickhouse.ui.ClickhouseSSLConfigurator"/>
+        <propertyConfigurator class="org.jkiss.dbeaver.ext.clickhouse.model.auth.ClickhouseAuthModelCloudSSO" uiClass="org.jkiss.dbeaver.ext.clickhouse.ui.auth.ClickhouseCloudSSOAuthConfigurator"/>
+        <propertyConfigurator class="org.jkiss.dbeaver.ext.clickhouse.model.auth.ClickhouseAuthModelOIDC" uiClass="org.jkiss.dbeaver.ext.clickhouse.ui.auth.ClickhouseOIDCAuthConfigurator"/>
     </extension>
 </plugin>

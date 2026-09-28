@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,15 +26,16 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.*;
 import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.model.data.resultset.DBCSmartTransactionManager;
 import org.jkiss.dbeaver.model.exec.*;
 import org.jkiss.dbeaver.model.navigator.DBNDataSource;
 import org.jkiss.dbeaver.model.navigator.DBNDatabaseNode;
 import org.jkiss.dbeaver.model.qm.QMUtils;
 import org.jkiss.dbeaver.model.rm.RMConstants;
+import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.runtime.IPluginService;
 import org.jkiss.dbeaver.runtime.qm.DefaultExecutionHandler;
 import org.jkiss.dbeaver.ui.ActionUtils;
-import org.jkiss.dbeaver.ui.ISmartTransactionManager;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.editors.EditorUtils;
 import org.jkiss.dbeaver.ui.editors.IStatefulEditor;
@@ -126,7 +127,7 @@ public class DataSourcePropertyTester extends PropertyTester {
                     if (context != null && context.isConnected()) {
                         if (receiver instanceof IPageChangeProvider pcp) {
                             Object selectedPage = pcp.getSelectedPage();
-                            if (!(selectedPage instanceof ISmartTransactionManager)) {
+                            if (!(selectedPage instanceof DBCSmartTransactionManager)) {
                                 return Boolean.FALSE.equals(expectedValue);
                             }
                         }
@@ -174,13 +175,18 @@ public class DataSourcePropertyTester extends PropertyTester {
 
         @Override
         public void activateService() {
+            if (DBWorkbench.getPlatform().getApplication().isHeadlessMode()) {
+                return;
+            }
             qmHandler = new QMEventsHandler();
             QMUtils.registerHandler(qmHandler);
         }
 
         @Override
         public void deactivateService() {
-            QMUtils.unregisterHandler(qmHandler);
+            if (qmHandler != null) {
+                QMUtils.unregisterHandler(qmHandler);
+            }
         }
     }
 

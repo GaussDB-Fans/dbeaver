@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,10 @@ package org.jkiss.dbeaver.model.security;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.model.DBInternalDatabaseInformationProvider;
 import org.jkiss.dbeaver.model.DBPObjectController;
 import org.jkiss.dbeaver.model.auth.SMAuthCredentialsManager;
+import org.jkiss.dbeaver.model.auth.SMObjectType;
 import org.jkiss.dbeaver.model.security.user.SMAuthPermissions;
 import org.jkiss.dbeaver.model.security.user.SMObjectPermissions;
 import org.jkiss.dbeaver.model.security.user.SMUser;
@@ -33,7 +35,7 @@ import java.util.Set;
 /**
  * Admin interface
  */
-public interface SMController extends DBPObjectController,
+public interface SMController extends DBPObjectController, DBInternalDatabaseInformationProvider,
     SMAuthCredentialsManager, SMAuthController {
 
 
@@ -64,6 +66,7 @@ public interface SMController extends DBPObjectController,
      * @return the user parameters
      * @throws DBException the db exception
      */
+    @NotNull
     Map<String, Object> getCurrentUserParameters() throws DBException;
 
     /**
@@ -113,6 +116,7 @@ public interface SMController extends DBPObjectController,
      * @return the string [ ]
      * @throws DBException the db exception
      */
+    @NotNull
     String[] getCurrentUserLinkedProviders() throws DBException;
 
     ///////////////////////////////////////////
@@ -131,7 +135,7 @@ public interface SMController extends DBPObjectController,
     ///////////////////////////////////////////
     // Sessions
 
-    boolean isSessionPersisted(String id) throws DBException;
+    boolean isSessionPersisted(@NotNull String id) throws DBException;
 
 
     /**
@@ -146,6 +150,7 @@ public interface SMController extends DBPObjectController,
      *
      * @throws DBException if the current refresh token invalid
      */
+    @NotNull
     SMTokens refreshSession(@NotNull String refreshToken) throws DBException;
 
     /**
@@ -155,7 +160,7 @@ public interface SMController extends DBPObjectController,
      * @param parameters the parameters
      * @throws DBException the db exception
      */
-    void updateSession(@NotNull String sessionId, Map<String, Object> parameters) throws DBException;
+    void updateSession(@NotNull String sessionId, @NotNull Map<String, Object> parameters) throws DBException;
 
     ///////////////////////////////////////////
     // Permissions
@@ -166,11 +171,13 @@ public interface SMController extends DBPObjectController,
      * @return the token permissions
      * @throws DBException the db exception
      */
+    @NotNull
     SMAuthPermissions getTokenPermissions() throws DBException;
 
     ///////////////////////////////////////////
     // Auth providers
 
+    @NotNull
     SMAuthProviderDescriptor[] getAvailableAuthProviders() throws DBException;
 
     /**
@@ -229,6 +236,29 @@ public interface SMController extends DBPObjectController,
     boolean hasAccessToUsers(@NotNull String teamRole, @NotNull Set<String> userIds) throws DBException;
 
     @NotNull
-    String[] getTeamMembers(String teamId) throws DBException;
+    String[] getTeamMembers(@NotNull String teamId) throws DBException;
+
+    /**
+     * Reads user settings.
+     * IF object type and id are null then returns all project settings
+     */
+    @NotNull
+    List<SMObjectSettings> getObjectSettings(
+        @NotNull String projectId,
+        @Nullable SMObjectType objectType,
+        @Nullable String objectId,
+        @Nullable String[] settingIds
+    ) throws DBException;
+
+    /**
+     * Sets user settings for a specified object.
+     * If value in map entry is null then setting is deleted.
+     */
+    void setObjectSettings(
+        @NotNull String projectId,
+        @NotNull SMObjectType objectType,
+        @NotNull String objectId,
+        @NotNull Map<String, String> settings
+    ) throws DBException;
 
 }

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,11 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
-import org.jkiss.dbeaver.model.DBPErrorAssistant;
 import org.jkiss.dbeaver.model.data.DBDValueHandler;
-import org.jkiss.dbeaver.model.exec.*;
+import org.jkiss.dbeaver.model.exec.DBCException;
+import org.jkiss.dbeaver.model.exec.DBCExecutionPurpose;
+import org.jkiss.dbeaver.model.exec.DBCSavepoint;
+import org.jkiss.dbeaver.model.exec.DBCStatementType;
 import org.jkiss.dbeaver.model.exec.jdbc.*;
 import org.jkiss.dbeaver.model.impl.AbstractSession;
 import org.jkiss.dbeaver.model.impl.jdbc.JDBCDataSource;
@@ -47,9 +49,15 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
 
     @NotNull
     final JDBCExecutionContext context;
+    private volatile Thread blockThread;
+    private volatile JDBCDatabaseMetaDataImpl metaData;
 
-    public JDBCConnectionImpl(@NotNull JDBCExecutionContext context, @NotNull DBRProgressMonitor monitor, @NotNull DBCExecutionPurpose purpose, @NotNull String taskTitle)
-    {
+    public JDBCConnectionImpl(
+        @NotNull JDBCExecutionContext context,
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBCExecutionPurpose purpose,
+        @NotNull String taskTitle
+    ) {
         super(monitor, purpose, taskTitle);
         this.context = context;
     }
@@ -80,6 +88,9 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     @Override
     public boolean isConnected() {
         try {
+            if (context == null) {
+                return false;
+            }
             synchronized (context) {
                 return !isClosed();
             }
@@ -119,7 +130,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
                     return prepareCall(sqlQuery);
                 }
                 catch (SQLException e) {
-                    if (DBExecUtils.discoverErrorType(getDataSource(), e) == DBPErrorAssistant.ErrorType.FEATURE_UNSUPPORTED) {
+                    if (JDBCUtils.isFeatureNotSupportedError(getDataSource(), e)) {
                         return prepareCall(sqlQuery);
                     } else {
                         throw e;
@@ -181,7 +192,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
                     return prepareStatement(sqlQuery);
                 }
                 catch (SQLException e) {
-                    if (DBExecUtils.discoverErrorType(getDataSource(), e) == DBPErrorAssistant.ErrorType.FEATURE_UNSUPPORTED) {
+                    if (JDBCUtils.isFeatureNotSupportedError(getDataSource(), e)) {
                         return prepareStatement(sqlQuery);
                     } else {
                         throw e;
@@ -200,7 +211,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
                     dbStat =  prepareStatement(sqlQuery);
                 }
                 catch (SQLException e) {
-                    if (DBExecUtils.discoverErrorType(getDataSource(), e) == DBPErrorAssistant.ErrorType.FEATURE_UNSUPPORTED) {
+                    if (JDBCUtils.isFeatureNotSupportedError(getDataSource(), e)) {
                         dbStat = prepareStatement(sqlQuery);
                     } else {
                         throw e;
@@ -215,7 +226,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     }
 
     private static boolean isInternalDriverError(Throwable e) {
-        return !(e instanceof SQLException) || e instanceof SQLFeatureNotSupportedException;
+        return !(e instanceof SQLException) || JDBCUtils.isFeatureNotSupportedError(null, e);
     }
 
     // Disable escaping (#3512)
@@ -236,16 +247,10 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
         return context.getDataSource().getContainer().getDefaultValueHandler();
     }
 
-    private JDBCStatement makeStatement(Statement statement)
+    private JDBCStatement makeStatement(@NotNull JDBCObjectSupplier<Statement> statement)
         throws SQLException
     {
-        if (statement instanceof CallableStatement) {
-            return createCallableStatementImpl((CallableStatement)statement, null);
-        } else if (statement instanceof PreparedStatement) {
-            return createPreparedStatementImpl((PreparedStatement)statement, null);
-        } else {
-            return createStatementImpl(statement);
-        }
+        return createStatementImpl(statement);
     }
 
     @NotNull
@@ -253,7 +258,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCStatement createStatement()
         throws SQLException
     {
-        return makeStatement(getOriginal().createStatement());
+        return makeStatement(() -> getOriginal().createStatement());
     }
 
     @NotNull
@@ -261,7 +266,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCPreparedStatement prepareStatement(String sql)
         throws SQLException
     {
-        return createPreparedStatementImpl(getOriginal().prepareStatement(sql), sql);
+        return createPreparedStatementImpl(() -> getOriginal().prepareStatement(sql), sql);
     }
 
     @NotNull
@@ -269,7 +274,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCCallableStatement prepareCall(String sql)
         throws SQLException
     {
-        return createCallableStatementImpl(getOriginal().prepareCall(sql), sql);
+        return createCallableStatementImpl(() -> getOriginal().prepareCall(sql), sql);
     }
 
     @Override
@@ -348,10 +353,11 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
 
     @NotNull
     @Override
-    public JDBCDatabaseMetaData getMetaData()
-        throws SQLException
-    {
-        return new JDBCDatabaseMetaDataImpl(this, getOriginal().getMetaData());
+    public synchronized JDBCDatabaseMetaData getMetaData() throws SQLException {
+        if (metaData == null) {
+            metaData = new JDBCDatabaseMetaDataImpl(this, getOriginal().getMetaData());
+        }
+        return metaData;
     }
 
     @Override
@@ -414,7 +420,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCStatement createStatement(int resultSetType, int resultSetConcurrency)
         throws SQLException
     {
-        return createStatementImpl(getOriginal().createStatement(resultSetType, resultSetConcurrency));
+        return createStatementImpl(() -> getOriginal().createStatement(resultSetType, resultSetConcurrency));
     }
 
     @NotNull
@@ -423,7 +429,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
         throws SQLException
     {
         return createPreparedStatementImpl(
-            getOriginal().prepareStatement(sql, resultSetType, resultSetConcurrency),
+            () -> getOriginal().prepareStatement(sql, resultSetType, resultSetConcurrency),
             sql);
     }
 
@@ -432,7 +438,10 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCCallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency)
         throws SQLException
     {
-        return createCallableStatementImpl(getOriginal().prepareCall(sql, resultSetType, resultSetConcurrency), sql);
+        return createCallableStatementImpl(
+            () -> getOriginal().prepareCall(sql, resultSetType, resultSetConcurrency),
+            sql
+        );
     }
 
     @Override
@@ -522,7 +531,8 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCStatement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability)
         throws SQLException
     {
-        return makeStatement(getOriginal().createStatement(resultSetType, resultSetConcurrency, resultSetHoldability));
+        return makeStatement(
+            () -> getOriginal().createStatement(resultSetType, resultSetConcurrency, resultSetHoldability));
     }
 
     @NotNull
@@ -531,7 +541,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
         throws SQLException
     {
         return createPreparedStatementImpl(
-            getOriginal().prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability),
+            () -> getOriginal().prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability),
             sql);
     }
 
@@ -541,7 +551,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
         throws SQLException
     {
         return createCallableStatementImpl(
-            getOriginal().prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability),
+            () -> getOriginal().prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability),
             sql);
     }
 
@@ -550,7 +560,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCPreparedStatement prepareStatement(String sql, int autoGeneratedKeys)
         throws SQLException
     {
-        return createPreparedStatementImpl(getOriginal().prepareStatement(sql, autoGeneratedKeys), sql);
+        return createPreparedStatementImpl(() -> getOriginal().prepareStatement(sql, autoGeneratedKeys), sql);
     }
 
     @NotNull
@@ -558,7 +568,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCPreparedStatement prepareStatement(String sql, int[] columnIndexes)
         throws SQLException
     {
-        return createPreparedStatementImpl(getOriginal().prepareStatement(sql, columnIndexes), sql);
+        return createPreparedStatementImpl(() -> getOriginal().prepareStatement(sql, columnIndexes), sql);
     }
 
     @NotNull
@@ -566,7 +576,7 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     public JDBCPreparedStatement prepareStatement(String sql, String[] columnNames)
         throws SQLException
     {
-        return createPreparedStatementImpl(getOriginal().prepareStatement(sql, columnNames), sql);
+        return createPreparedStatementImpl(() -> getOriginal().prepareStatement(sql, columnNames), sql);
     }
 
     @Nullable
@@ -706,48 +716,41 @@ public class JDBCConnectionImpl extends AbstractSession implements JDBCSession, 
     }
 
     @Override
-    public void cancelBlock(@NotNull DBRProgressMonitor monitor, @Nullable Thread blockThread)
-        throws DBException
-    {
-        if (context.isConnected()) {
-            try {
-                // Sync execution context because async access during disconnect may cause troubles
-                synchronized (getExecutionContext()) {
-                    if (!getDataSource().closeConnection(getOriginal(), "Close database connection", false)) {
-                        throw new DBCException("Couldn't close JDBC connection: timeout");
-                    }
-                }
-            } catch (SQLException e) {
-                throw new DBCException(e, getExecutionContext());
-            }
+    public void cancelBlock(@NotNull DBRProgressMonitor monitor, @Nullable Thread blockThread) throws DBException {
+        // Let's try with driver implementation
+        Connection connection = context.getConnectionOrNull();
+        if (connection != null) {
+            getDataSource().cancelCurrentExecution(connection, blockThread);
         }
     }
 
-    protected JDBCStatement createStatementImpl(Statement original)
+    @Override
+    public Thread getBlockThread() {
+        return blockThread;
+    }
+
+    public void setBlockThread(Thread blockThread) {
+        this.blockThread = blockThread;
+    }
+
+    protected JDBCStatement createStatementImpl(@NotNull JDBCObjectSupplier<Statement> original)
         throws SQLException,IllegalArgumentException
     {
-        if (original == null) {
-            throw new IllegalArgumentException("Null statement");
-        }
         return context.getDataSource().getJdbcFactory().createStatement(this, original, !isLoggingEnabled());
     }
 
-    protected JDBCPreparedStatement createPreparedStatementImpl(PreparedStatement original, @Nullable String sql)
-        throws SQLException,IllegalArgumentException
-    {
-        if (original == null) {
-            throw new IllegalArgumentException("Null statement");
-        }
-        return context.getDataSource().getJdbcFactory().createPreparedStatement(this, original, sql, !isLoggingEnabled());
+    protected JDBCPreparedStatement createPreparedStatementImpl(
+        @NotNull JDBCObjectSupplier<PreparedStatement> stmtSupplier,
+        @Nullable String sql
+    ) throws SQLException,IllegalArgumentException {
+        return context.getDataSource().getJdbcFactory().createPreparedStatement(this, stmtSupplier, sql, !isLoggingEnabled());
     }
 
-    protected JDBCCallableStatement createCallableStatementImpl(CallableStatement original, @Nullable String sql)
-        throws SQLException,IllegalArgumentException
-    {
-        if (original == null) {
-            throw new IllegalArgumentException("Null statement");
-        }
-        return context.getDataSource().getJdbcFactory().createCallableStatement(this, original, sql, !isLoggingEnabled());
+    protected JDBCCallableStatement createCallableStatementImpl(
+        @NotNull JDBCObjectSupplier<CallableStatement> stmtSupplier,
+        @Nullable String sql
+    ) throws SQLException,IllegalArgumentException {
+        return context.getDataSource().getJdbcFactory().createCallableStatement(this, stmtSupplier, sql, !isLoggingEnabled());
     }
 
 

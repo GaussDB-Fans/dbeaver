@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,21 @@
 
 package org.jkiss.dbeaver.model;
 
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
+
 import java.io.File;
 import java.util.Map;
 
 /**
  * External file manager
  */
-public interface DBPExternalFileManager
-{
-    Map<String, Object> getFileProperties(File file);
+public interface DBPExternalFileManager {
+    @Nullable
+    String getFileProperty(@NotNull File file, @NotNull String property);
 
-    Object getFileProperty(File file, String property);
+    void setFileProperty(@NotNull File file, @NotNull String property, @Nullable String value);
 
-    void setFileProperty(File file, String property, Object value);
-
-    Map<String, Map<String, Object>> getAllFiles();
+    @NotNull
+    Map<String, Map<String, String>> getAllFiles();
 }

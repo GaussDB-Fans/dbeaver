@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,18 +21,21 @@ import org.eclipse.jface.viewers.*;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
-import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPDataTypeProvider;
 import org.jkiss.dbeaver.model.DBPEvaluationContext;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
+import org.jkiss.dbeaver.model.struct.DBSCollationProvider;
 import org.jkiss.dbeaver.model.struct.DBSDataType;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
@@ -44,6 +47,7 @@ import org.jkiss.dbeaver.tools.transfer.database.DatabaseMappingContainer;
 import org.jkiss.dbeaver.tools.transfer.database.DatabaseMappingType;
 import org.jkiss.dbeaver.tools.transfer.registry.DataTransferAttributeTransformerDescriptor;
 import org.jkiss.dbeaver.tools.transfer.ui.internal.DTUIMessages;
+import org.jkiss.dbeaver.ui.BaseThemeSettings;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.SharedTextColors;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -52,6 +56,7 @@ import org.jkiss.dbeaver.ui.controls.ListContentProvider;
 import org.jkiss.dbeaver.ui.controls.ViewerColumnController;
 import org.jkiss.utils.CommonUtils;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 /**
@@ -59,11 +64,14 @@ import java.util.*;
  */
 class ColumnsMappingDialog extends DialogPage {
 
+    private static final Log log = Log.getLog(ColumnsMappingDialog.class);
+
     private final DatabaseConsumerSettings settings;
     private final DatabaseMappingContainer mapping;
     private final Collection<DatabaseMappingAttribute> attributeMappings;
     private TableViewer mappingViewer;
-    private Font boldFont;
+    private DBSCollationProvider collationProvider;
+    private List<String> defaultCollations = List.of();
 
     ColumnsMappingDialog(DatabaseConsumerSettings settings, DatabaseMappingContainer mapping) {
         this.settings = settings;
@@ -75,8 +83,6 @@ class ColumnsMappingDialog extends DialogPage {
     public void createControl(Composite parent) {
         DBPDataSource targetDataSource = settings.getTargetDataSource(mapping);
 
-        boldFont = UIUtils.makeBoldFont(parent.getFont());
-
         Composite composite = new Composite(parent, SWT.NONE);
         composite.setLayout(new GridLayout(2, false));
         composite.setLayoutData(new GridData(GridData.FILL_BOTH));
@@ -87,10 +93,33 @@ class ColumnsMappingDialog extends DialogPage {
         Text sourceEntity = UIUtils.createLabelText(composite, DTUIMessages.columns_mapping_dialog_composite_label_text_source_entity, DBUtils.getObjectFullName(mapping.getSource(), DBPEvaluationContext.UI), SWT.BORDER | SWT.READ_ONLY | SWT.MULTI | SWT.V_SCROLL);
         ((GridData) sourceEntity.getLayoutData()).widthHint = 600;
         ((GridData) sourceEntity.getLayoutData()).heightHint = UIUtils.getFontHeight(sourceEntity) * 3;
-        UIUtils.createLabelText(composite, DTUIMessages.columns_mapping_dialog_composite_label_text_target_container, (targetDataSource == null ? "?" : targetDataSource.getContainer().getName()), SWT.BORDER | SWT.READ_ONLY);
-        Text targetEntity = UIUtils.createLabelText(composite, DTUIMessages.columns_mapping_dialog_composite_label_text_target_entity, mapping.getTargetName(), SWT.BORDER | SWT.READ_ONLY);
+        UIUtils.createLabelText(
+            composite,
+            DTUIMessages.columns_mapping_dialog_composite_label_text_target_container,
+            (targetDataSource == null ? "?" : targetDataSource.getContainer().getName()),
+            SWT.BORDER | SWT.READ_ONLY
+        );
+        Text targetEntity = UIUtils.createLabelText(
+            composite,
+            DTUIMessages.columns_mapping_dialog_composite_label_text_target_entity,
+            mapping.getTargetName(),
+            SWT.BORDER | SWT.READ_ONLY
+        );
         ((GridData) targetEntity.getLayoutData()).widthHint = 600;
         ((GridData) targetEntity.getLayoutData()).heightHint = UIUtils.getFontHeight(sourceEntity) * 3;
+
+        // collation is a column-level property and only some databases have it at all,
+        // detect it here so the grid doesn't show an empty column for the rest
+        collationProvider = detectCollationProvider();
+        if (collationProvider != null) {
+            loadDefaultCollations();
+            UIUtils.createLabelText(
+                composite,
+                DTUIMessages.columns_mapping_dialog_composite_label_text_target_collation,
+                CommonUtils.notEmpty(collationProvider.getDefaultCollation()),
+                SWT.BORDER | SWT.READ_ONLY
+            );
+        }
 
         mappingViewer = new TableViewer(composite, SWT.BORDER | SWT.MULTI | SWT.FULL_SELECTION);
         GridData gd = new GridData(GridData.FILL_BOTH);
@@ -155,7 +184,7 @@ class ColumnsMappingDialog extends DialogPage {
                 } else {
                     cell.setBackground(null);
                 }
-                cell.setFont(boldFont);
+                cell.setFont(BaseThemeSettings.instance.treeAndTableFontBold);
             }
         }, new EditingSupport(mappingViewer) {
             @Override
@@ -165,8 +194,7 @@ class ColumnsMappingDialog extends DialogPage {
                     DatabaseMappingAttribute mapping = (DatabaseMappingAttribute) element;
                     DatabaseMappingContainer container = mapping.getParent();
                     if ((container.getMappingType() == DatabaseMappingType.existing || container.getMappingType() == DatabaseMappingType.recreate) &&
-                        container.getTarget() instanceof DBSEntity) {
-                        DBSEntity parentEntity = (DBSEntity) container.getTarget();
+                        container.getTarget() instanceof DBSEntity parentEntity) {
                         for (DBSEntityAttribute attr : CommonUtils.safeCollection(parentEntity.getAttributes(new VoidProgressMonitor()))) {
                             items.add(attr.getName());
                         }
@@ -204,8 +232,7 @@ class ColumnsMappingDialog extends DialogPage {
                     } else {
                         DatabaseMappingContainer container = attrMapping.getParent();
                         if ((container.getMappingType() == DatabaseMappingType.existing || container.getMappingType() == DatabaseMappingType.recreate) &&
-                            container.getTarget() instanceof DBSEntity) {
-                            DBSEntity parentEntity = (DBSEntity) container.getTarget();
+                            container.getTarget() instanceof DBSEntity parentEntity) {
                             for (DBSEntityAttribute attr : CommonUtils.safeCollection(parentEntity.getAttributes(new VoidProgressMonitor()))) {
                                 if (name.equalsIgnoreCase(attr.getName())) {
                                     attrMapping.setTarget(attr);
@@ -232,7 +259,7 @@ class ColumnsMappingDialog extends DialogPage {
                 DatabaseMappingAttribute attrMapping = (DatabaseMappingAttribute) cell.getElement();
                 DBPDataSource dataSource = settings.getTargetDataSource(attrMapping);
                 cell.setText(attrMapping.getTargetType(dataSource, true));
-                cell.setFont(boldFont);
+                cell.setFont(BaseThemeSettings.instance.treeAndTableFontBold);
             }
         }, new EditingSupport(mappingViewer) {
             @Override
@@ -271,7 +298,8 @@ class ColumnsMappingDialog extends DialogPage {
 
             @Override
             protected boolean canEdit(Object element) {
-                return true;
+                DatabaseMappingAttribute attrMapping = (DatabaseMappingAttribute) element;
+                return attrMapping.getMappingType() == DatabaseMappingType.create;
             }
 
             @Override
@@ -288,20 +316,69 @@ class ColumnsMappingDialog extends DialogPage {
             }
         });
 
+        if (collationProvider != null) {
+            columnController.addColumn(
+                DTUIMessages.columns_mapping_dialog_column_collation_text,
+                DTUIMessages.columns_mapping_dialog_column_collation_tip,
+                SWT.LEFT,
+                true,
+                false,
+                false,
+                null,
+                new ColumnLabelProvider() {
+                    @Override
+                    public void update(ViewerCell cell) {
+                        DatabaseMappingAttribute attrMapping = (DatabaseMappingAttribute) cell.getElement();
+                        // collation is only applied to the columns we create
+                        if (attrMapping.getMappingType() != DatabaseMappingType.create) {
+                            cell.setText("");
+                            return;
+                        }
+                        cell.setText(CommonUtils.notEmpty(attrMapping.getTargetCollation(new VoidProgressMonitor())));
+                    }
+                },
+                new EditingSupport(mappingViewer) {
+                    @Override
+                    protected CellEditor getCellEditor(Object element) {
+                        return new CustomComboBoxCellEditor(
+                            mappingViewer,
+                            mappingViewer.getTable(),
+                            getCollationItems((DatabaseMappingAttribute) element),
+                            SWT.BORDER);
+                    }
+
+                    @Override
+                    protected boolean canEdit(Object element) {
+                        DatabaseMappingAttribute attrMapping = (DatabaseMappingAttribute) element;
+                        return attrMapping.getMappingType() == DatabaseMappingType.create
+                            && attrMapping.isCollationApplicable();
+                    }
+
+                    @Override
+                    protected Object getValue(Object element) {
+                        DatabaseMappingAttribute attrMapping = (DatabaseMappingAttribute) element;
+                        return CommonUtils.notEmpty(attrMapping.getTargetCollation(new VoidProgressMonitor()));
+                    }
+
+                    @Override
+                    protected void setValue(Object element, Object value) {
+                        DatabaseMappingAttribute attrMapping = (DatabaseMappingAttribute) element;
+                        attrMapping.setTargetCollation(CommonUtils.toString(value));
+                        mappingViewer.refresh(element);
+                    }
+                });
+        }
+
         columnController.addColumn(DTUIMessages.columns_mapping_dialog_column_type_text_mapping, null, SWT.LEFT, true, false, new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
                 DatabaseMappingAttribute mapping = (DatabaseMappingAttribute) element;
-                switch (mapping.getMappingType()) {
-                    case existing:
-                        return DTUIMessages.columns_mapping_dialog_cell_text_existing;
-                    case create:
-                        return DTUIMessages.columns_mapping_dialog_cell_text_new;
-                    case skip:
-                        return DTUIMessages.columns_mapping_dialog_cell_text_skip;
-                    default:
-                        return "?";
-                }
+                return switch (mapping.getMappingType()) {
+                    case existing -> DTUIMessages.columns_mapping_dialog_cell_text_existing;
+                    case create -> DTUIMessages.columns_mapping_dialog_cell_text_new;
+                    case skip -> DTUIMessages.columns_mapping_dialog_cell_text_skip;
+                    default -> "?";
+                };
             }
         });
 
@@ -331,6 +408,46 @@ class ColumnsMappingDialog extends DialogPage {
         mappingViewer.setInput(attributeMappings);
 
         setControl(composite);
+    }
+
+    @Nullable
+    private DBSCollationProvider detectCollationProvider() {
+        for (DatabaseMappingAttribute attrMapping : attributeMappings) {
+            if (attrMapping.isCollationApplicable()) {
+                return attrMapping.getTargetCollationProvider();
+            }
+        }
+        return null;
+    }
+
+    /** Reads the server collation list in background, later lookups hit the model cache */
+    private void loadDefaultCollations() {
+        try {
+            UIUtils.runInProgressService(monitor ->
+                defaultCollations = collationProvider.getRelatedCollations(monitor, collationProvider.getDefaultCollation()));
+        } catch (InvocationTargetException e) {
+            log.debug("Can't read collation list", e.getTargetException());
+        } catch (InterruptedException e) {
+            // canceled by user, the dropdown just stays short
+        }
+    }
+
+    @NotNull
+    private String[] getCollationItems(@NotNull DatabaseMappingAttribute attrMapping) {
+        // empty value means the column inherits the default collation of the target database
+        Set<String> items = new TreeSet<>();
+        items.add("");
+        items.addAll(defaultCollations);
+        String defaultCollation = collationProvider.getDefaultCollation();
+        if (!CommonUtils.isEmpty(defaultCollation)) {
+            items.add(defaultCollation);
+        }
+        String current = attrMapping.getTargetCollation(new VoidProgressMonitor());
+        if (!CommonUtils.isEmpty(current)) {
+            items.add(current);
+            items.addAll(collationProvider.getRelatedCollations(new VoidProgressMonitor(), current));
+        }
+        return items.toArray(new String[0]);
     }
 
 }

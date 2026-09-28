@@ -1,0 +1,55 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Schema file written by PDE -->
+<schema targetNamespace="org.jkiss.dbeaver.model" xmlns="http://www.w3.org/2001/XMLSchema">
+<annotation>
+      <appInfo>
+         <meta.schema plugin="org.jkiss.dbeaver.model" id="org.jkiss.dbeaver.fileTypeHandler" name="File type handlers"/>
+      </appInfo>
+      <documentation>File type handler</documentation>
+   </annotation>
+
+   <element name="extension">
+      <annotation><appInfo><meta.element/></appInfo></annotation>
+      <complexType>
+         <sequence minOccurs="0" maxOccurs="unbounded">
+            <element ref="handler" minOccurs="0" maxOccurs="unbounded"/>
+         </sequence>
+         <attribute name="point" type="string" use="required"/>
+         <attribute name="id" type="string"/>
+         <attribute name="name" type="string">
+            <annotation>
+               <appInfo>
+                  <meta.attribute translatable="true"/>
+               </appInfo>
+            </annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+   <element name="handler">
+      <complexType>
+         <sequence>
+            <element name="extension" minOccurs="0" maxOccurs="unbounded">
+                <complexType>
+                   <attribute name="id" type="string"/>
+                   <attribute name="extensions" type="string" use="required"/>
+                   <attribute name="icon" type="string"/>
+                   <attribute name="supportsImport" type="boolean"/>
+                </complexType>
+            </element>
+         </sequence>
+         <attribute name="id" type="string" use="required"/>
+         <attribute name="class" type="string" use="required">
+            <annotation>
+               <appInfo>
+                  <meta.attribute kind="java" basedOn=":org.jkiss.dbeaver.model.file.FileOpenHandler"/>
+               </appInfo>
+            </annotation>
+         </attribute>
+         <attribute name="remote" type="boolean"/>
+         <attribute name="databaseHandler" type="boolean"/>
+         <attribute name="order" type="integer"/>
+      </complexType>
+   </element>
+
+</schema>

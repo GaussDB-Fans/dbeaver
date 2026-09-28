@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPDataSourceConfigurationStorage;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
+import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 
 import java.util.Collection;
@@ -29,12 +30,13 @@ import java.util.function.Predicate;
 /**
  * Data source persistent registry.
  */
-public interface DataSourcePersistentRegistry {
+public interface DataSourcePersistentRegistry extends DBPDataSourceRegistry {
 
     /**
      * Loads data sources from storages.
      */
-    boolean loadDataSources(
+    @Nullable
+    DataSourceParseResults loadDataSources(
         @NotNull List<DBPDataSourceConfigurationStorage> storages,
         @NotNull DataSourceConfigurationManager manager,
         @Nullable Collection<String> dataSourceIds,
@@ -50,6 +52,7 @@ public interface DataSourcePersistentRegistry {
     /**
      * Returns data source configuration manager.
      */
+    @NotNull
     DataSourceConfigurationManager getConfigurationManager();
 
     /**

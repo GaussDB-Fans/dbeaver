@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ package org.jkiss.dbeaver.model.fs.nio;
 import org.eclipse.core.filesystem.EFS;
 import org.eclipse.core.filesystem.IFileStore;
 import org.eclipse.core.filesystem.provider.FileSystem;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.app.DBPProject;
-import org.jkiss.dbeaver.model.navigator.DBNProject;
 import org.jkiss.dbeaver.model.navigator.fs.DBNFileSystem;
 import org.jkiss.dbeaver.model.navigator.fs.DBNFileSystemRoot;
 import org.jkiss.dbeaver.model.navigator.fs.DBNFileSystems;
-import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
+import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.utils.CommonUtils;
 
@@ -51,6 +51,19 @@ public class EFSNIOFileSystem extends FileSystem {
 
     @Override
     public IFileStore getStore(URI uri) {
+        try {
+            return DBWorkbench.getPlatformUI().runWithMonitor(
+                monitor -> getFileStoreFromUri(monitor, uri));
+        } catch (Exception e) {
+            if (e instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IllegalArgumentException("Error while getting file store", e);
+        }
+    }
+
+    @NotNull
+    private static IFileStore getFileStoreFromUri(@NotNull DBRProgressMonitor monitor, @NotNull URI uri) {
         Path path = null;
 
         String projectName = CommonUtils.toString(uri.getHost(), uri.getAuthority());
@@ -64,41 +77,60 @@ public class EFSNIOFileSystem extends FileSystem {
                 String fsId = vfsPath[1];
                 String fsRootPath = vfsPath[2];
 
-                DBNProject projectNode = DBWorkbench.getPlatform().getNavigatorModel().getRoot().getProjectNode(project);
-                if (projectNode != null) {
-                    DBNFileSystems fileSystemsNode = projectNode.getExtraNode(DBNFileSystems.class);
-                    if (fileSystemsNode != null) {
-                        try {
-                            fileSystemsNode.getChildren(new VoidProgressMonitor());
-                            DBNFileSystem fsNode = fileSystemsNode.getFileSystem(fsType, fsId);
-                            if (fsNode != null) {
-                                fsNode.getChildren(new VoidProgressMonitor());
-                                DBNFileSystemRoot fsNodeRoot = fsNode.getRoot(fsRootPath);
-                                if (fsNodeRoot != null) {
-                                    try {
-                                        relPath = CommonUtils.removeLeadingSlash(relPath);
-                                        relPath = URLDecoder.decode(relPath, StandardCharsets.UTF_8);
-                                        path = fsNodeRoot.getPath().resolve(relPath);
-                                    } catch (Exception e) {
-                                        log.debug("Error resolving path", e);
-                                    }
+                DBNFileSystems fileSystemsNode = DBWorkbench.getPlatform().getNavigatorModel().getRoot().getExtraNode(DBNFileSystems.class);
+                if (fileSystemsNode != null) {
+                    try {
+                        fileSystemsNode.getChildren(monitor);
+                        DBNFileSystem fsNode = fileSystemsNode.getFileSystem(fsType, fsId);
+                        if (fsNode != null) {
+                            fsNode.getChildren(monitor);
+                            DBNFileSystemRoot fsNodeRoot = fsNode.getRoot(fsRootPath);
+                            if (fsNodeRoot != null) {
+                                try {
+                                    relPath = CommonUtils.removeLeadingSlash(relPath);
+                                    relPath = URLDecoder.decode(relPath, StandardCharsets.UTF_8);
+                                    path = fsNodeRoot.getPath().resolve(relPath);
+                                } catch (Exception e) {
+                                    throw new IllegalArgumentException("Error resolving path '" + relPath + "'", e);
                                 }
-                            } else {
-                                log.debug("File system '" + fsType + ":" + fsId + "' not found");
                             }
-                        } catch (Exception e) {
-                            log.debug("Error reading file systems", e);
+                        } else {
+                            log.debug("File system '" + fsType + ":" + fsId + "' not found");
                         }
+                    } catch (Exception e) {
+                        if (e instanceof RuntimeException re) {
+                            throw re;
+                        }
+                        throw new IllegalArgumentException("Error reading file systems", e);
                     }
                 }
             }
         }
 
         if (path == null) {
+            // throw new IllegalArgumentException("Invalid " + DBVFS_FS_ID + " URI: " + uri);
             log.debug("Invalid " + DBVFS_FS_ID + " URI: " + uri);
             return EFS.getNullFileSystem().getStore(uri);
         }
         return new EFSNIOFileStore(uri, path);
     }
 
+    @Override
+    public int attributes() {
+        return EFS.ATTRIBUTE_OWNER_READ
+               | EFS.ATTRIBUTE_OWNER_WRITE | EFS.ATTRIBUTE_OWNER_EXECUTE
+               | EFS.ATTRIBUTE_GROUP_READ | EFS.ATTRIBUTE_GROUP_WRITE
+               | EFS.ATTRIBUTE_GROUP_EXECUTE | EFS.ATTRIBUTE_OTHER_READ
+               | EFS.ATTRIBUTE_OTHER_WRITE | EFS.ATTRIBUTE_OTHER_EXECUTE;
+    }
+
+    @Override
+    public boolean canDelete() {
+        return true;
+    }
+
+    @Override
+    public boolean canWrite() {
+        return true;
+    }
 }

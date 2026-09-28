@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,10 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.ui.internal.WorkbenchMessages;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.DBIcon;
+import org.jkiss.dbeaver.model.data.resultset.ResultSetSaveSettings;
 import org.jkiss.dbeaver.model.edit.DBEPersistAction;
 import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
@@ -34,7 +36,6 @@ import org.jkiss.dbeaver.runtime.ui.UIServiceSQL;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetSaveReport;
-import org.jkiss.dbeaver.ui.controls.resultset.ResultSetSaveSettings;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetViewer;
 import org.jkiss.dbeaver.ui.dialogs.DetailsViewDialog;
 import org.jkiss.dbeaver.ui.internal.UINavigatorMessages;
@@ -45,13 +46,11 @@ import java.util.List;
 
 public class SavePreviewDialog extends DetailsViewDialog {
 
-    private static final String DIALOG_ID = "DBeaver.RSV.SavePreviewDialog";//$NON-NLS-1$
-
-    private ResultSetViewer viewer;
-    private boolean showCascadeSettings;
+    private final ResultSetViewer viewer;
+    private final boolean showCascadeSettings;
     private Object sqlPanel;
-    private ResultSetSaveSettings saveSettings;
-    private ResultSetSaveReport saveReport;
+    private final ResultSetSaveSettings saveSettings;
+    private final ResultSetSaveReport saveReport;
 
     public SavePreviewDialog(@NotNull ResultSetViewer viewer, boolean showCascadeSettings, @NotNull ResultSetSaveReport saveReport) {
         super(viewer.getControl().getShell(), "Preview changes", DBIcon.STATUS_WARNING);
@@ -94,7 +93,8 @@ public class SavePreviewDialog extends DetailsViewDialog {
             Label imgLabel = new Label(msgComposite, SWT.NONE);
             imgLabel.setImage(DBeaverIcons.getImage(DBIcon.STATUS_WARNING));
             Label msgText = new Label(msgComposite, SWT.NONE);
-            msgText.setText("You are about to save your changes into the database (" + viewer.getDataSource().getContainer().getName() + ").\n" +
+            msgText.setText("You are about to save your changes into the database (" +
+                viewer.getDataSource().getContainer().getName() + ").\n" +
                 (CommonUtils.isEmpty(changesReport) ? "" : "\t" + changesReport + ".") + "\nAre you sure you want to proceed?");
         }
 
@@ -138,14 +138,15 @@ public class SavePreviewDialog extends DetailsViewDialog {
     }
 
     @Override
-    protected void createButtonsForButtonBar(@NotNull Composite parent, int alignment) {
-        if (alignment == SWT.LEAD) {
-            createDetailsButton(parent);
-            ((GridData) detailsButton.getLayoutData()).horizontalAlignment = GridData.BEGINNING;
-        } else {
-            createButton(parent, IDialogConstants.OK_ID, UINavigatorMessages.dialog_filter_save_button, false);
-            createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, true);
-        }
+    protected void createButtonsForLeftButtonBar(@NotNull Composite parent) {
+        createDetailsButton(parent);
+        ((GridData) detailsButton.getLayoutData()).horizontalAlignment = GridData.BEGINNING;
+    }
+
+    @Override
+    protected void createButtonsForButtonBar(@NotNull Composite parent) {
+        createButton(parent, IDialogConstants.OK_ID, WorkbenchMessages.Save, false);
+        createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, true);
     }
 
     @Override
@@ -153,7 +154,7 @@ public class SavePreviewDialog extends DetailsViewDialog {
         Composite group = new Composite(composite, SWT.NONE);
         group.setLayout(new GridLayout(1, true));
         group.setLayoutData(new GridData(GridData.FILL_BOTH));
-        Composite previewFrame = new Composite(group, SWT.BORDER);
+        Composite previewFrame = new Composite(group, SWT.NONE);
         GridData gd = new GridData(GridData.FILL_BOTH);
         gd.heightHint = 250;
         previewFrame.setLayoutData(gd);
@@ -167,7 +168,7 @@ public class SavePreviewDialog extends DetailsViewDialog {
                     previewFrame,
                     viewer,
                     UINavigatorMessages.editors_entity_dialog_preview_title,
-                    true,
+                    false,
                     "");
             } catch (Exception e) {
                 DBWorkbench.getPlatformUI().showError("Can't create SQL panel", "Error creating SQL panel", e);
@@ -188,7 +189,7 @@ public class SavePreviewDialog extends DetailsViewDialog {
                 }
             });
 
-            String scriptText = "";
+            String scriptText;
             if (!sqlScript.isEmpty()) {
                 scriptText = SQLUtils.generateScript(
                     viewer.getDataSource(),

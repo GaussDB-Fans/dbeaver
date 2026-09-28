@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,19 +33,17 @@ import org.jkiss.dbeaver.model.app.DBPWorkspaceEclipse;
 import org.jkiss.dbeaver.model.auth.SMSessionContext;
 import org.jkiss.dbeaver.model.fs.DBFResourceAdapter;
 import org.jkiss.dbeaver.model.fs.DBFVirtualFileSystemRoot;
-import org.jkiss.dbeaver.model.fs.nio.EFSNIOFile;
-import org.jkiss.dbeaver.model.fs.nio.EFSNIOFileSystemRoot;
-import org.jkiss.dbeaver.model.fs.nio.EFSNIOFolder;
 import org.jkiss.dbeaver.model.impl.app.BaseProjectImpl;
 import org.jkiss.dbeaver.model.impl.app.BaseWorkspaceImpl;
 import org.jkiss.dbeaver.model.navigator.DBNModel;
 import org.jkiss.dbeaver.model.task.DBTTaskManager;
-import org.jkiss.dbeaver.registry.DesktopDataSourceRegistry;
+import org.jkiss.dbeaver.registry.DataSourceRegistry;
 import org.jkiss.dbeaver.registry.task.TaskConstants;
 import org.jkiss.dbeaver.registry.task.TaskManagerImpl;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
+import org.jkiss.dbeaver.utils.ResourceUtils;
+import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
-import org.jkiss.utils.IOUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -59,24 +57,10 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
     private static final Log log = Log.getLog(DesktopProjectImpl.class);
 
     private static final String SETTINGS_FOLDER = ".settings";
-    private static final String PROJECT_FILE = ".project";
-
-    private static final String EMPTY_PROJECT_TEMPLATE = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <projectDescription>
-        <name>${project-name}</name>
-        <comment></comment>
-        <projects>
-        </projects>
-        <buildSpec>
-        </buildSpec>
-        <natures>
-        </natures>
-        </projectDescription>""";
 
     @NotNull
     private final IProject project;
-    protected volatile TaskManagerImpl taskManager;
+    protected volatile DBTTaskManager taskManager;
 
     private volatile boolean projectInvalidated;
 
@@ -189,33 +173,19 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
 
     @NotNull
     protected DBPDataSourceRegistry createDataSourceRegistry() {
-        return new DesktopDataSourceRegistry(this);
+        return new DataSourceRegistry<>(this);
     }
 
     @Nullable
     @Override
     public <T> T adaptResource(DBFVirtualFileSystemRoot fsRoot, Path path, Class<T> adapter) {
         if (adapter == IResource.class) {
-            return adapter.cast(createResourceFromPath(fsRoot, path));
+            return adapter.cast(ResourceUtils.createResourceFromPath(fsRoot, getEclipseProject(), path));
         }
         return null;
     }
 
     @NotNull
-    private IResource createResourceFromPath(DBFVirtualFileSystemRoot fsRoot, Path path) {
-        EFSNIOFileSystemRoot root = new EFSNIOFileSystemRoot(
-            getEclipseProject(),
-            fsRoot,
-            fsRoot.getFileSystem().getType() + "/" + fsRoot.getFileSystem().getId() + "/" + fsRoot.getRootId()
-        );
-        if (path.toString().endsWith("/")) {
-            return new EFSNIOFolder(root, path);
-        } else {
-            return new EFSNIOFile(root, path);
-        }
-    }
-
-    @Nullable
     @Override
     public DBNModel getNavigatorModel() {
         return getWorkspace().getPlatform().getNavigatorModel();
@@ -228,10 +198,7 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
         if (taskManager == null) {
             synchronized (metadataSync) {
                 if (taskManager == null) {
-                    taskManager = new TaskManagerImpl(
-                        this,
-                        getWorkspace().getMetadataFolder().resolve(TaskConstants.TASK_STATS_FOLDER)
-                    );
+                    taskManager = createTaskManager();
                 }
             }
         }
@@ -247,6 +214,14 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
         return create ? getTaskManager() : null;
     }
 
+    @NotNull
+    protected DBTTaskManager createTaskManager() {
+        return new TaskManagerImpl(
+            this,
+            getWorkspace().getMetadataFolder().resolve(TaskConstants.TASK_STATS_FOLDER)
+        );
+    }
+
     /**
      * Validates project files structure.
      * If project was created in older DBeaver version then converts it to newer format
@@ -259,7 +234,7 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
         Path mdConfig = getMetadataPath().resolve(BaseProjectImpl.METADATA_STORAGE_FILE);
         if (!Files.exists(mdConfig)) {
             // Migrate
-            Map<String, Map<String, Object>> projectResourceProperties = extractProjectResourceProperties();
+            Map<String, Map<String, String>> projectResourceProperties = extractProjectResourceProperties();
             synchronized (metadataSync) {
                 setResourceProperties(projectResourceProperties);
             }
@@ -267,8 +242,8 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
         }
     }
 
-    private Map<String, Map<String, Object>> extractProjectResourceProperties() {
-        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+    private Map<String, Map<String, String>> extractProjectResourceProperties() {
+        Map<String, Map<String, String>> result = new LinkedHashMap<>();
 
         DBPWorkspaceEclipse workspaceEclipse;
         if (getWorkspace() instanceof DBPWorkspaceEclipse) {
@@ -292,7 +267,7 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
                                                           if ("sql-editor-project-id".equals(resProps[1])) {
                                                               continue;
                                                           }
-                                                          Map<String, Object> propsMap = result.computeIfAbsent(
+                                                          Map<String, String> propsMap = result.computeIfAbsent(
                                                               entry.getPath().makeRelativeTo(projectPath).toString(), s -> new LinkedHashMap<>());
                                                           propsMap.put(resProps[1], resProps[2]);
                                                       }
@@ -339,16 +314,12 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
 
     public void recoverProjectDescription() throws IOException {
         // .project file missing. Let's try to create an empty project config
-        Path mdFile = getAbsolutePath().resolve(IProjectDescription.DESCRIPTION_FILE_NAME);
-        log.debug("Recovering project '" + project.getName() + "' metadata " + mdFile.toAbsolutePath());
-
-        IOUtils.writeFileFromString(
-            mdFile.toFile(),
-            EMPTY_PROJECT_TEMPLATE.replace("${project-name}", project.getName()));
+        log.debug("Recovering project '" + project.getName() + "' metadata " + getAbsolutePath().toAbsolutePath());
+        BaseProjectImpl.updateProjectFile(getAbsolutePath(), project.getName());
     }
 
     @NotNull
-    public Map<String, Map<String, Object>> getAllResourceProperties() {
+    public Map<String, Map<String, String>> getAllResourceProperties() {
         this.loadMetadata();
         synchronized (resourcesSync) {
             return new TreeMap<>(this.resourceProperties);
@@ -373,7 +344,7 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
         synchronized (resourcesSync) {
             if (resourceProperties != null) {
                 String oldResPath = CommonUtils.normalizeResourcePath(oldPath.toString());
-                Map<String, Object> props = resourceProperties.remove(oldResPath);
+                Map<String, String> props = resourceProperties.remove(oldResPath);
                 if (props != null) {
                     String newResPath = CommonUtils.normalizeResourcePath(newPath.toString());
                     resourceProperties.put(newResPath, props);
@@ -386,4 +357,32 @@ public class DesktopProjectImpl extends BaseProjectImpl implements RCPProject, D
         }
     }
 
+    @Override
+    public void updateProjectNature() {
+        if (!isRegistryLoaded()) {
+            return;
+        }
+        try {
+            IProject eclipseProject = this.getEclipseProject();
+            if (eclipseProject != null) {
+                final IProjectDescription description = eclipseProject.getDescription();
+                if (description != null) {
+                    String[] natureIds = description.getNatureIds();
+                    if (getDataSourceRegistry() instanceof DataSourceRegistry<?> dsr && dsr.getDataSourceCount() > 0) {
+                        // Add nature
+                        if (!ArrayUtils.contains(natureIds, DBeaverNature.NATURE_ID)) {
+                            description.setNatureIds(ArrayUtils.add(String.class, natureIds, DBeaverNature.NATURE_ID));
+                            try {
+                                eclipseProject.setDescription(description, new NullProgressMonitor());
+                            } catch (CoreException e) {
+                                log.debug("Can't set project nature", e);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug(e);
+        }
+    }
 }

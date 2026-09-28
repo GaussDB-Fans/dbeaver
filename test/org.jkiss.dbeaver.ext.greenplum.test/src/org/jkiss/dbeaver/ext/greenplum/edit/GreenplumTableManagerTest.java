@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,21 +24,19 @@ import org.jkiss.dbeaver.ext.postgresql.model.PostgreDatabase;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreDialect;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreTableForeign;
 import org.jkiss.dbeaver.model.impl.edit.SQLDatabasePersistAction;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 
-@RunWith(MockitoJUnitRunner.class)
-public class GreenplumTableManagerTest {
+public class GreenplumTableManagerTest extends DBeaverUnitTest {
     @Mock
     private GreenplumSchema mockSchema;
 
@@ -56,7 +54,7 @@ public class GreenplumTableManagerTest {
     @Mock
     private PostgreServerGreenplum mockServerGreenplum;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Mockito.when(mockDataSource.getSQLDialect()).thenReturn(new PostgreDialect());
         Mockito.when(mockSchema.getDatabase()).thenReturn(mockDatabase);
@@ -79,7 +77,7 @@ public class GreenplumTableManagerTest {
         SQLDatabasePersistAction sqlDatabasePersistAction =
                 greenplumTableManager.createDeleteAction(greenplumTable, Collections.emptyMap());
 
-        Assert.assertEquals(regularTableDropTableQuery.getScript(), sqlDatabasePersistAction.getScript());
+        Assertions.assertEquals(regularTableDropTableQuery.getScript(), sqlDatabasePersistAction.getScript());
     }
 
     @Test
@@ -95,7 +93,7 @@ public class GreenplumTableManagerTest {
         SQLDatabasePersistAction sqlDatabasePersistAction =
                 greenplumTableManager.createDeleteAction(postgreForeignTable, Collections.emptyMap());
 
-        Assert.assertEquals(regularTableDropTableQuery.getScript(), sqlDatabasePersistAction.getScript());
+        Assertions.assertEquals(regularTableDropTableQuery.getScript(), sqlDatabasePersistAction.getScript());
     }
 
     @Test
@@ -112,6 +110,6 @@ public class GreenplumTableManagerTest {
                 greenplumTableManager.createDeleteAction(greenplumTable,
                         Collections.singletonMap("deleteCascade", true));
 
-        Assert.assertEquals(regularTableDropTableQuery.getScript(), sqlDatabasePersistAction.getScript());
+        Assertions.assertEquals(regularTableDropTableQuery.getScript(), sqlDatabasePersistAction.getScript());
     }
 }

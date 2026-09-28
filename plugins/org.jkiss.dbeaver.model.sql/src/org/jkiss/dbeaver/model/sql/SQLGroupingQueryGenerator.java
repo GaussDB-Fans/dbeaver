@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,26 +18,21 @@ package org.jkiss.dbeaver.model.sql;
 
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
-import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSource;
-import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.sql.parser.SQLSemanticProcessor;
 import org.jkiss.dbeaver.model.struct.DBSDataContainer;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.utils.CommonUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public class SQLGroupingQueryGenerator {
 
@@ -56,7 +51,7 @@ public class SQLGroupingQueryGenerator {
     @NotNull
     private final SQLSyntaxManager syntaxManager;
     @NotNull
-    private final List<String> groupAttributes;
+    private final List<SQLGroupingAttribute> groupAttributes;
     @NotNull
     private final List<String> groupFunctions;
 
@@ -68,7 +63,7 @@ public class SQLGroupingQueryGenerator {
         @NotNull DBSDataContainer container,
         @NotNull SQLDialect dialect,
         @NotNull SQLSyntaxManager syntaxManager,
-        @NotNull List<String> groupAttributes,
+        @NotNull List<SQLGroupingAttribute> groupAttributes,
         @NotNull List<String> groupFunctions,
         boolean showDuplicatesOnly
     ) {
@@ -81,7 +76,7 @@ public class SQLGroupingQueryGenerator {
         this.showDuplicatesOnly = showDuplicatesOnly;
     }
 
-
+    @NotNull
     public String generateGroupingQuery(String queryText) throws DBException {
 
         if (queryText == null || queryText.isEmpty()) {
@@ -97,7 +92,7 @@ public class SQLGroupingQueryGenerator {
             }
         }
 
-        boolean useAliasForColumns = dataSource.getSQLDialect().supportsAliasInConditions();
+        boolean useAliasForColumns = dataSource.getSQLDialect().supportsAliasInSelect();
         StringBuilder sql = new StringBuilder();
         funcAliases = new String[groupFunctions.size()];
         for (int i = 0; i < groupFunctions.size(); i++) {
@@ -107,11 +102,22 @@ public class SQLGroupingQueryGenerator {
                 funcAliases[i] = groupFunctions.get(i);
             }
         }
-        if (!(container instanceof DBSEntity) && dialect.supportsSubqueries()) {
+        String subqueryAlias;
+        Statement statement = null;
+        try {
+            statement = SQLSemanticProcessor.parseQuery(dataSource.getSQLDialect(), queryText);
+        } catch (Throwable e) {
+            log.debug("SQL parse error", e);
+        }
+        boolean isCTE = statement instanceof Select select && select.getWithItemsList() != null && !select.getWithItemsList().isEmpty();
+        if (!(container instanceof DBSEntity) && dialect.supportsSubqueries() && !isCTE) {
+            subqueryAlias = "src";
             sql.append("SELECT ");
             for (int i = 0; i < groupAttributes.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append(quotedGroupingString(dataSource, groupAttributes.get(i)));
+                if (i > 0) {
+                    sql.append(", ");
+                }
+                sql.append(groupAttributes.get(i).prepareSqlString(subqueryAlias));
             }
             for (int i = 0; i < groupFunctions.size(); i++) {
                 String func = groupFunctions.get(i);
@@ -122,55 +128,54 @@ public class SQLGroupingQueryGenerator {
             }
             sql.append(" FROM (\n");
             sql.append(queryText);
-            sql.append("\n) src");
+            sql.append("\n) ").append(subqueryAlias);
         } else {
-            try {
-                Statement statement = SQLSemanticProcessor.parseQuery(dataSource.getSQLDialect(), queryText);
-                if (statement instanceof Select && ((Select) statement).getSelectBody() instanceof PlainSelect) {
-                    PlainSelect select = (PlainSelect) ((Select) statement).getSelectBody();
-                    select.setOrderByElements(null);
-
-                    SQLDialect sqlDialect = dataSource.getSQLDialect();
-                    if (select.getFromItem() instanceof Table table) {
-                        select.setFromItem(new FormattedTable(table, sqlDialect));
-                    }
-
-                    List<SelectItem> selectItems = new ArrayList<>();
-                    select.setSelectItems(selectItems);
-                    for (String groupAttribute : groupAttributes) {
-                        selectItems.add(
-                            new SelectExpressionItem(
-                                new Column(
-                                    quotedGroupingString(dataSource, groupAttribute))));
-                    }
-                    for (int i = 0; i < groupFunctions.size(); i++) {
-                        String func = groupFunctions.get(i);
-                        Expression expression = SQLSemanticProcessor.parseExpression(func);
-                        SelectExpressionItem sei = new SelectExpressionItem(expression);
-                        if (useAliasForColumns) {
-                            sei.setAlias(new Alias(funcAliases[i]));
-                        }
-                        selectItems.add(sei);
-                    }
+            subqueryAlias = null;
+            if (statement instanceof PlainSelect select) {
+                select.setOrderByElements(null);
+                SQLDialect sqlDialect = dataSource.getSQLDialect();
+                if (select.getFromItem() instanceof Table table) {
+                    FormattedTable formattedTable = new FormattedTable(table, sqlDialect);
+                    // implicitly parsed where-conditions might have use table alias if presented,
+                    // so don't forget it while replacing the table reference
+                    formattedTable.setAlias(table.getAlias());
+                    select.setFromItem(formattedTable);
                 }
-                queryText = statement.toString();
-            } catch (Throwable e) {
-                log.debug("SQL parse error", e);
+
+                List<SelectItem<?>> selectItems = new ArrayList<>();
+                select.setSelectItems(selectItems);
+                for (SQLGroupingAttribute groupAttribute : groupAttributes) {
+                    selectItems.add(new SelectItem<>(groupAttribute.prepareExpression()));
+                }
+                for (int i = 0; i < groupFunctions.size(); i++) {
+                    String func = groupFunctions.get(i);
+                    Expression expression = SQLSemanticProcessor.parseExpression(func);
+                    SelectItem<?> sei = new SelectItem<>(expression);
+                    if (useAliasForColumns) {
+                        sei.setAlias(new Alias(funcAliases[i]));
+                    }
+                    selectItems.add(sei);
+                }
             }
-            sql.append(queryText);
+            if (statement != null) {
+                queryText = statement.toString();
+                sql.append(queryText);
+            }
         }
 
         sql.append("\nGROUP BY ");
         for (int i = 0; i < groupAttributes.size(); i++) {
-            if (i > 0) sql.append(", ");
-            sql.append(quotedGroupingString(dataSource, groupAttributes.get(i)));
+            if (i > 0) {
+                sql.append(", ");
+            }
+            sql.append(groupAttributes.get(i).prepareSqlString(subqueryAlias));
         }
-        boolean isDefaultGrouping = groupFunctions.size() == 1 && groupFunctions.get(0).equalsIgnoreCase(DEFAULT_FUNCTION);
 
-        if (isDefaultGrouping && showDuplicatesOnly) {
+        if (showDuplicatesOnly) {
             sql.append("\nHAVING ");
-            if (dataSource.getSQLDialect().supportsAliasInHaving()) {
-                sql.append(funcAliases[0]);
+            int foundCountIndex = countFunctionIndex();
+            if (dataSource.getSQLDialect().supportsAliasInHaving() && foundCountIndex >= 0) {
+                sql.append(funcAliases[foundCountIndex]);
             } else {
                 // very special case
                 sql.append(DEFAULT_FUNCTION);
@@ -180,32 +185,40 @@ public class SQLGroupingQueryGenerator {
         return sql.toString();
     }
 
+    @NotNull
     private String makeGroupFunctionAlias(List<String> groupFunctions, int funcIndex) {
         String function = groupFunctions.get(funcIndex);
         StringBuilder alias = new StringBuilder();
+        char delimiter = '_';
         for (int i = 0; i < function.length(); i++) {
             char c = function.charAt(i);
-            if (Character.isLetterOrDigit(c) || c == '_') {
+            if (Character.isLetterOrDigit(c) || c == delimiter) {
                 alias.append(c);
+            } else if (c == '(' || c == ')') {
+                alias.append(delimiter);
             }
         }
-        if (alias.length() > 0) {
-            alias.append('_');
+        while (!alias.isEmpty() && alias.charAt(alias.length() - 1) == delimiter) {
+            alias.deleteCharAt(alias.length() - 1);
+        }
+
+        if (!alias.isEmpty()) {
+            long numberOfSameColumnNames = Arrays.stream(funcAliases)
+                .filter(Objects::nonNull)
+                .filter(a -> a.startsWith(alias.toString().toLowerCase(Locale.ENGLISH)))
+                .count();
+
+            boolean isAliasReservedWord = dialect.getReservedWords()
+                    .stream()
+                    .anyMatch(kw -> kw.equalsIgnoreCase(alias.toString()));
+
+            // Add suffix for duplicate or reserved aliases
+            if (numberOfSameColumnNames > 0 || isAliasReservedWord) {
+                alias.append(delimiter).append(numberOfSameColumnNames);
+            }
             return alias.toString().toLowerCase(Locale.ENGLISH);
         }
         return "i_" + funcIndex;
-    }
-
-    private String quotedGroupingString(DBPDataSource dataSource, String string) {
-        try {
-            Expression expression = SQLSemanticProcessor.parseExpression(string);
-            if (!(expression instanceof Column)) {
-                return string;
-            }
-        } catch (DBException e) {
-            log.debug("Can't parse expression " + string, e);
-        }
-        return DBUtils.getQuotedIdentifier(dataSource, string);
     }
 
     public String[] getFuncAliases() {
@@ -227,12 +240,24 @@ public class SQLGroupingQueryGenerator {
         }
 
         @Override
+        @NotNull
         public String getFullyQualifiedName() {
             String databaseName = !CommonUtils.isEmpty(getDatabase().getDatabaseName())
-                    ? getDatabase().getDatabaseName() + sqlDialect.getCatalogSeparator()
-                    : "";
+                ? getDatabase().getDatabaseName() + sqlDialect.getCatalogSeparator()
+                : "";
             String schemaName = getSchemaName() != null ? getSchemaName() + sqlDialect.getStructSeparator() : "";
             return databaseName + schemaName + getName();
         }
+    }
+
+    private int countFunctionIndex() {
+        for (int i = 0; i < groupFunctions.size(); i++) {
+            if (groupFunctions.get(i).equalsIgnoreCase(DEFAULT_FUNCTION)) {
+                return funcAliases.length > i
+                    ? i
+                    : -1;
+            }
+        }
+        return -1;
     }
 }

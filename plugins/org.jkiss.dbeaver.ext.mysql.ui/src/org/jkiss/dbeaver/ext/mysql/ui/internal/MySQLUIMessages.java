@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +34,8 @@ public final class MySQLUIMessages extends NLS {
     public static String dialog_connection_server_timezone;
     public static String dialog_connection_auto_detect;
     public static String dialog_connection_local_client;
-    public static String edit_catalog_manager_dialog_schema_name;
+    public static String dialog_connection_show_all_databases;
+    public static String dialog_connection_show_all_databases_tip;
     public static String edit_command_change_user_action_create_new_user;
     public static String edit_command_change_user_action_update_user_record;
     public static String edit_command_change_user_name;
@@ -44,12 +44,10 @@ public final class MySQLUIMessages extends NLS {
     public static String edit_constraint_manager_title;
     public static String edit_foreign_key_manager_title;
     public static String edit_index_manager_title;
-    public static String edit_procedure_manager_body;
     public static String edit_user_manager_command_create_user;
     public static String edit_user_manager_command_rename_user;
     public static String edit_user_manager_command_drop_user;
     public static String edit_user_manager_command_flush_privileges;
-    public static String edit_view_manager_definition;
     public static String editors_session_editor_action_kill_Session;
     public static String editors_session_editor_action_terminate_Query;
     public static String editors_session_editor_confirm;
@@ -82,16 +80,12 @@ public final class MySQLUIMessages extends NLS {
     public static String mysql_ssl_configurator_checkbox_require_ssl;
     public static String mysql_ssl_configurator_checkbox_verify_server_certificate;
     public static String mysql_ssl_configurator_checkbox_allow_public_key_tip;
-    public static String mysql_ssl_configurator_label_ca_certificate;
     public static String mysql_ssl_configurator_label_cipher_suites;
     public static String mysql_ssl_configurator_label_cipher_suites_tip;
     public static String mysql_ssl_configurator_checkbox_require_ssl_tip;
     public static String mysql_ssl_configurator_checkbox_verify_server_certificate_tip;
     public static String mysql_ssl_configurator_legend_advanced;
-    public static String tools_db_export_wizard_job_dump_log_reader;
     public static String tools_db_export_wizard_message_export_completed;
-    public static String tools_db_export_wizard_monitor_bytes;
-    public static String tools_db_export_wizard_monitor_export_db;
     public static String tools_db_export_wizard_page_objects_dialog_wizard_title;
     public static String tools_db_export_wizard_page_objects_dialog_title_choose_objects;
     public static String tools_db_export_wizard_page_objects_dialog_description;
@@ -100,14 +94,15 @@ public final class MySQLUIMessages extends NLS {
     public static String tools_db_export_wizard_page_settings_checkbox_remove_definer;
     public static String tools_db_export_wizard_page_settings_checkbox_binary_hex;
     public static String tools_db_export_wizard_page_settings_checkbox_no_data;
+    public static String tools_db_export_wizard_page_settings_checkbox_no_routines;
     public static String tools_db_export_wizard_page_settings_checkbox_disable_keys;
     public static String tools_db_export_wizard_page_settings_checkbox_dump_events;
     public static String tools_db_export_wizard_page_settings_checkbox_ext_inserts;
     public static String tools_db_export_wizard_page_settings_checkbox_no_create;
+    public static String tools_db_export_wizard_page_settings_checkbox_compressed;
     public static String tools_db_export_wizard_page_settings_combo_item_lock_tables;
     public static String tools_db_export_wizard_page_settings_combo_item_normal;
     public static String tools_db_export_wizard_page_settings_combo_item_online_backup;
-    public static String tools_db_export_wizard_page_settings_file_selector_title;
     public static String tools_db_export_wizard_page_settings_group_exe_method;
     public static String tools_db_export_wizard_page_settings_group_objects;
     public static String tools_db_export_wizard_page_settings_group_show_views;

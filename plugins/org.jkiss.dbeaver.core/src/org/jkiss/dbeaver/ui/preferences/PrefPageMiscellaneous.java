@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.jface.util.PropertyChangeEvent;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyListener;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.RGB;
@@ -81,18 +79,20 @@ public class PrefPageMiscellaneous extends PrefPageMiscellaneousAbstract impleme
         final DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
 
         {
-            Group groupEditors = UIUtils.createControlGroup(composite, CoreMessages.pref_page_ui_general_boolean, 3, GridData.FILL_HORIZONTAL, 0);
+            Composite groupEditors = UIUtils.createTitledComposite(
+                composite,
+                CoreMessages.pref_page_ui_general_boolean,
+                3,
+                GridData.FILL_HORIZONTAL
+            );
 
             UIUtils.createControlLabel(groupEditors, CoreMessages.pref_page_ui_general_boolean_label_mode);
 
-            final SelectionAdapter selectionListener = new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    final DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
-                    final BooleanMode mode = (BooleanMode) e.widget.getData();
-                    notifyBooleanStylesChanged(BooleanStyleSet.getDefaultStyles(store, mode));
-                }
-            };
+            final SelectionListener selectionListener = SelectionListener.widgetSelectedAdapter(e -> {
+                final DBPPreferenceStore preferenceStore = DBWorkbench.getPlatform().getPreferenceStore();
+                final BooleanMode mode = (BooleanMode) e.widget.getData();
+                notifyBooleanStylesChanged(BooleanStyleSet.getDefaultStyles(preferenceStore, mode));
+            });
 
             booleanStylesChangeListeners.add(value -> {
                 booleanCheckedPanel.loadStyle(value.getCheckedStyle(), value.getDefaultColor());
@@ -109,7 +109,7 @@ public class PrefPageMiscellaneous extends PrefPageMiscellaneousAbstract impleme
                 booleanStylesChangeListeners.add(value -> button.setSelection(button.getData() == value.getMode()));
             }
 
-            final Composite group = new Composite(groupEditors, SWT.BORDER);
+            final Composite group = new Composite(groupEditors, SWT.NONE);
             group.setLayout(GridLayoutFactory.swtDefaults().numColumns(7).create());
             group.setLayoutData(GridDataFactory.swtDefaults().span(3, 1).create());
 
@@ -152,7 +152,7 @@ public class PrefPageMiscellaneous extends PrefPageMiscellaneousAbstract impleme
         }
 
         {
-            final Group group = UIUtils.createControlGroup(composite, "Holiday decorations", 1, GridData.FILL_HORIZONTAL, 0);
+            Composite group = UIUtils.createTitledComposite(composite, "Holiday decorations", 1, GridData.FILL_HORIZONTAL);
 
             holidayDecorationsCheck = UIUtils.createCheckbox(group, "Show holiday decorations", false);
             holidayDecorationsCheck.setLayoutData(new GridData());
@@ -269,9 +269,7 @@ public class PrefPageMiscellaneous extends PrefPageMiscellaneousAbstract impleme
                     updateBooleanValidState();
                 };
 
-                final SelectionListener menuSelectionListener = new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
+                final SelectionListener menuSelectionListener = SelectionListener.widgetSelectedAdapter(e -> {
                         final MenuItem menu = (MenuItem) e.widget;
                         switch (menu.getID()) {
                             case MENU_PRESET_ID:
@@ -284,8 +282,7 @@ public class PrefPageMiscellaneous extends PrefPageMiscellaneousAbstract impleme
                                 notifyPropertyChanged(e.widget, PROP_COLOR, currentDefaultColor);
                                 break;
                         }
-                    }
-                };
+                    });
 
                 for (UIElementAlignment alignment : UIElementAlignment.values()) {
                     final TextWithDropDown text = new TextWithDropDown(parent, SWT.BORDER, alignment.getStyle(), menuSelectionListener);
@@ -363,15 +360,12 @@ public class PrefPageMiscellaneous extends PrefPageMiscellaneousAbstract impleme
                 final ToolBar alignToolBar = new ToolBar(parent, SWT.HORIZONTAL);
                 alignToolBar.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, true, true));
 
-                final SelectionListener selectionListener = new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
+                final SelectionListener selectionListener = SelectionListener.widgetSelectedAdapter(e -> {
                         if (((ToolItem) e.widget).getSelection()) {
                             // React only to 'Selection' (avoid firing secondary event to 'DefaultSelection')
                             notifyPropertyChanged(e.widget, PROP_ALIGN, e.widget.getData());
                         }
-                    }
-                };
+                    });
 
                 for (final UIElementAlignment alignment : UIElementAlignment.values()) {
                     final ToolItem item = new ToolItem(alignToolBar, SWT.RADIO);

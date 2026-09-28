@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,15 @@
  */
 package org.jkiss.dbeaver.ext.wmi.views;
 
-import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.*;
-import org.jkiss.dbeaver.ext.wmi.Activator;
+import org.eclipse.swt.widgets.Combo;
+import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Text;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.ext.wmi.WMIMessages;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
@@ -43,25 +45,11 @@ public class WMIConnectionPage extends ConnectionPageWithAuth
     private Combo namespaceCombo;
     private Combo localeCombo;
 
-    private static ImageDescriptor logoImage = Activator.getImageDescriptor("icons/wmi_icon_big.png"); //$NON-NLS-1$
-
-    public WMIConnectionPage()
-    {
-    }
-
     @Override
-    public void dispose()
-    {
-        super.dispose();
-    }
-
-    @Override
-    public void createControl(Composite composite)
+    public void createControl(@NotNull Composite composite)
     {
         //Composite group = new Composite(composite, SWT.NONE);
         //group.setLayout(new GridLayout(1, true));
-        setImageDescriptor(logoImage);
-
         ModifyListener textListener = e -> evaluateURL();
 
         Composite addrGroup = new Composite(composite, SWT.NONE);
@@ -71,7 +59,7 @@ public class WMIConnectionPage extends ConnectionPageWithAuth
         addrGroup.setLayoutData(gd);
 
         {
-            Group hostGroup = UIUtils.createControlGroup(addrGroup, "Server", 4, GridData.FILL_HORIZONTAL, 0);
+            Composite hostGroup = UIUtils.createTitledComposite(addrGroup, "Server", 4, GridData.FILL_HORIZONTAL);
             Label hostLabel = UIUtils.createControlLabel(hostGroup, WMIMessages.wmi_connection_page_label_host);
             hostLabel.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_END));
 
@@ -141,7 +129,7 @@ public class WMIConnectionPage extends ConnectionPageWithAuth
     }
 
     @Override
-    public void saveSettings(DBPDataSourceContainer dataSource)
+    public void saveSettings(@NotNull DBPDataSourceContainer dataSource)
     {
         DBPConnectionConfiguration connectionInfo = dataSource.getConnectionConfiguration();
         if (hostText != null) {

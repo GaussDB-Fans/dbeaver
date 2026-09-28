@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.jkiss.dbeaver.model.impl.jdbc.data;
 
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ModelPreferences;
 import org.jkiss.dbeaver.model.app.DBPPlatform;
@@ -31,6 +32,7 @@ import org.jkiss.dbeaver.model.exec.DBCException;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCPreparedStatement;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCSession;
+import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSTypedObject;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
@@ -46,7 +48,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Clob;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 
 /**
  * JDBCContentCLOB
@@ -162,10 +163,10 @@ public class JDBCContentCLOB extends JDBCContentLOB implements DBDContent {
     }
 
     @Override
-    public void bindParameter(JDBCSession session, JDBCPreparedStatement preparedStatement,
-                              DBSTypedObject columnType, int paramIndex)
-        throws DBCException
-    {
+    public void bindParameter(
+        JDBCSession session, JDBCPreparedStatement preparedStatement,
+        DBSTypedObject columnType, int paramIndex
+    ) throws DBCException {
         try {
             if (storage != null) {
 //                String stringValue = ContentUtils.getContentStringValue(session.getProgressMonitor(), this);
@@ -176,27 +177,28 @@ public class JDBCContentCLOB extends JDBCContentLOB implements DBDContent {
                 try {
                     preparedStatement.setNCharacterStream(
                         paramIndex,
-                        tmpReader);
-                }
-                catch (Throwable e) {
-                    if (e instanceof SQLException && !(e instanceof SQLFeatureNotSupportedException)) {
-                        throw (SQLException)e;
+                        tmpReader
+                    );
+                } catch (Throwable e) {
+                    if (e instanceof SQLException && !(JDBCUtils.isFeatureNotSupportedError(session.getDataSource(), e))) {
+                        throw (SQLException) e;
                     } else {
                         long streamLength = ContentUtils.calculateContentLength(storage.getContentReader());
                         try {
                             preparedStatement.setCharacterStream(
                                 paramIndex,
                                 tmpReader,
-                                streamLength);
-                        }
-                        catch (Throwable e1) {
-                            if (e1 instanceof SQLException && !(e instanceof SQLFeatureNotSupportedException)) {
-                                throw (SQLException)e1;
+                                streamLength
+                            );
+                        } catch (Throwable e1) {
+                            if (e1 instanceof SQLException && !(JDBCUtils.isFeatureNotSupportedError(session.getDataSource(), e1))) {
+                                throw (SQLException) e1;
                             } else {
                                 preparedStatement.setCharacterStream(
                                     paramIndex,
                                     tmpReader,
-                                    (int)streamLength);
+                                    (int) streamLength
+                                );
                             }
                         }
                     }
@@ -206,15 +208,14 @@ public class JDBCContentCLOB extends JDBCContentLOB implements DBDContent {
             } else {
                 preparedStatement.setNull(paramIndex, java.sql.Types.CLOB);
             }
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             throw new DBCException(e, session.getExecutionContext());
-        }
-        catch (Throwable e) {
+        } catch (Throwable e) {
             throw new DBCException("IO error while binding content", e);
         }
     }
 
+    @Nullable
     @Override
     public Object getRawValue() {
         return clob;
@@ -232,6 +233,7 @@ public class JDBCContentCLOB extends JDBCContentLOB implements DBDContent {
         return new JDBCContentCLOB(executionContext, null);
     }
 
+    @Nullable
     @Override
     public String getDisplayString(@NotNull DBDDisplayFormat format)
     {

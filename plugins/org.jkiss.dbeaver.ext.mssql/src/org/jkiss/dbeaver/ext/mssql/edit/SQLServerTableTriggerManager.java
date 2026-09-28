@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,8 +52,8 @@ public class SQLServerTableTriggerManager extends SQLTriggerManager<SQLServerTab
     protected SQLServerTableTrigger createDatabaseObject(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBECommandContext context,
-        Object container,
-        Object copyFrom,
+        @NotNull Object container,
+        @Nullable Object copyFrom,
         @NotNull Map<String, Object> options
     ) {
         SQLServerTableBase table = (SQLServerTableBase) container;
@@ -80,7 +80,7 @@ public class SQLServerTableTriggerManager extends SQLTriggerManager<SQLServerTab
             actions.add(new SQLDatabasePersistAction("Create trigger", trigger.getBody(), true)); //$NON-NLS-2$
         } else {
             actions.add(new SQLDatabasePersistAction("Alter trigger",
-                SQLServerUtils.changeCreateToAlterDDL(trigger.getDataSource().getSQLDialect(), trigger.getBody()), true)); //$NON-NLS-2$
+                SQLServerUtils.changeCreateToAlterDDL(trigger.getDataSource(), trigger.getBody()), true)); //$NON-NLS-2$
         }
 
         if (defaultDatabase != table.getDatabase()) {

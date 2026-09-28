@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,11 @@ package org.jkiss.dbeaver.ext.postgresql.tools.fdw;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.dnd.TextTransfer;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Group;
+import org.eclipse.ui.internal.WorkbenchMessages;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreDataSource;
@@ -35,11 +34,11 @@ import org.jkiss.dbeaver.runtime.ui.UIServiceSQL;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.dialogs.ActiveWizardPage;
 import org.jkiss.dbeaver.ui.dialogs.DialogUtils;
-import org.jkiss.utils.IOUtils;
 
-import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 
@@ -70,7 +69,7 @@ class PostgreFDWConfigWizardPageFinal extends ActiveWizardPage<PostgreFDWConfigW
         Composite composite = UIUtils.createComposite(parent, 1);
 
         {
-            Group settingsGroup = UIUtils.createControlGroup(composite, "Script", 1, GridData.FILL_BOTH, 0);
+            Composite settingsGroup = UIUtils.createTitledComposite(composite, "Script", 1, GridData.FILL_BOTH);
 
             Composite sqlPanelPH = new Composite(settingsGroup, SWT.NONE);
             sqlPanelPH.setLayoutData(new GridData(GridData.FILL_BOTH));
@@ -92,26 +91,23 @@ class PostgreFDWConfigWizardPageFinal extends ActiveWizardPage<PostgreFDWConfigW
             }
             Composite buttonsPanel = UIUtils.createComposite(settingsGroup, 2);
             buttonsPanel.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
-            UIUtils.createDialogButton(buttonsPanel, "Copy", new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    UIUtils.setClipboardContents(buttonsPanel.getDisplay(), TextTransfer.getInstance(), scriptText);
-                }
-            });
-            UIUtils.createDialogButton(buttonsPanel, "Save ...", new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    final File saveFile = DialogUtils.selectFileForSave(
+            UIUtils.createDialogButton(buttonsPanel, WorkbenchMessages.Workbench_copy, SelectionListener.widgetSelectedAdapter(e ->
+                UIUtils.setClipboardContents(buttonsPanel.getDisplay(), TextTransfer.getInstance(), scriptText)));
+            UIUtils.createDialogButton(buttonsPanel, WorkbenchMessages.Save, SelectionListener.widgetSelectedAdapter(e -> {
+                    Path saveFile = DialogUtils.selectFileForSave(
                         buttonsPanel.getShell(), "Save SQL script", new String[]{"*.sql", "*.txt", "*", "*.*"}, null);
                     if (saveFile != null) {
                         try {
-                            IOUtils.writeFileFromString(saveFile, scriptText);
+                            Files.writeString(saveFile, scriptText);
                         } catch (IOException e1) {
-                            DBWorkbench.getPlatformUI().showError("Save scritp to file", "Error saving script to file " + saveFile.getAbsolutePath(), e1);
+                            DBWorkbench.getPlatformUI().showError(
+                                "Save scritp to file",
+                                "Error saving script to file " + saveFile.toAbsolutePath(),
+                                e1
+                            );
                         }
                     }
-                }
-            });
+                }));
         }
 
 
@@ -134,20 +130,16 @@ class PostgreFDWConfigWizardPageFinal extends ActiveWizardPage<PostgreFDWConfigW
             getWizard().getRunnableContext().run(true, true, monitor -> {
                 try {
                     DBExecUtils.tryExecuteRecover(monitor, dataSource, param -> {
-                        try {
-                            monitor.beginTask("Generate FDW script", 2);
-                            monitor.subTask("Read actions");
-                            List<DBEPersistAction> actions = getWizard().generateScript(monitor);
-                            monitor.subTask("Generate script");
-                            script.append(
-                                SQLUtils.generateScript(
-                                    dataSource,
-                                    actions.toArray(new DBEPersistAction[0]),
-                                    false));
-                            monitor.done();
-                        } catch (DBException e) {
-                            throw new InvocationTargetException(e);
-                        }
+                        monitor.beginTask("Generate FDW script", 2);
+                        monitor.subTask("Read actions");
+                        List<DBEPersistAction> actions = getWizard().generateScript(monitor);
+                        monitor.subTask("Generate script");
+                        script.append(
+                            SQLUtils.generateScript(
+                                dataSource,
+                                actions.toArray(new DBEPersistAction[0]),
+                                false));
+                        monitor.done();
                     });
                 } catch (DBException e) {
                     throw new InvocationTargetException(e);

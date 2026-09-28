@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,17 +18,15 @@ package org.jkiss.dbeaver.ext.greenplum.model;
 
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreServerExtension;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreTableBase;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.jkiss.dbeaver.ext.greenplum.model.GreenplumWithClauseBuilder.generateWithClause;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
-@RunWith(MockitoJUnitRunner.class)
-public class GreenplumWithClauseBuilderTest {
+public class GreenplumWithClauseBuilderTest extends DBeaverUnitTest {
     @Mock
     private GreenplumTable table;
 
@@ -49,7 +47,7 @@ public class GreenplumWithClauseBuilderTest {
         when(tableBase.getRelOptions()).thenReturn(new String[]{"appendonly=true"});
 
         String withClause = generateWithClause(table, tableBase);
-        assertEquals("\nWITH (\n\tappendonly=true\n)", withClause);
+        Assertions.assertEquals("\nWITH (\n\tappendonly=true\n)", withClause);
     }
 
     @Test
@@ -60,7 +58,7 @@ public class GreenplumWithClauseBuilderTest {
         when(tableBase.getRelOptions()).thenReturn(new String[]{"appendonly=true"});
 
         String withClause = generateWithClause(table, tableBase);
-        assertEquals("\nWITH (\n\tOIDS=TRUE,\n\tappendonly=true\n)", withClause);
+        Assertions.assertEquals("\nWITH (\n\tOIDS=TRUE,\n\tappendonly=true\n)", withClause);
     }
 
     @Test
@@ -71,7 +69,7 @@ public class GreenplumWithClauseBuilderTest {
         when(tableBase.getRelOptions()).thenReturn(null);
 
         String withClause = generateWithClause(table, tableBase);
-        assertEquals("", withClause);
+        Assertions.assertEquals("", withClause);
     }
 
     @Test
@@ -82,7 +80,7 @@ public class GreenplumWithClauseBuilderTest {
         when(tableBase.getRelOptions()).thenReturn(null);
 
         String withClause = generateWithClause(table, tableBase);
-        assertEquals("\nWITH (\n\tOIDS=TRUE\n)", withClause);
+        Assertions.assertEquals("\nWITH (\n\tOIDS=TRUE\n)", withClause);
     }
 
     @Test
@@ -93,7 +91,7 @@ public class GreenplumWithClauseBuilderTest {
         when(tableBase.getRelOptions()).thenReturn(new String[]{"appendonly=true", "orientation=column"});
 
         String withClause = generateWithClause(table, tableBase);
-        assertEquals("\nWITH (\n\tOIDS=TRUE,\n\tappendonly=true,\n\torientation=column\n)", withClause);
+        Assertions.assertEquals("\nWITH (\n\tOIDS=TRUE,\n\tappendonly=true,\n\torientation=column\n)", withClause);
     }
 
     private void setupGeneralWhenMocks(boolean supportOids, boolean hasOids) {

@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2017-2018 Alexander Fedorov (alexander.fedorov@jkiss.org)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +31,6 @@ public class DebugUIMessages extends NLS {
     public static String DatabaseTab_datasource_label_text;
 
     public static String DatabaseTab_debug_type_group_text;
-    public static String DatabaseTab_configuration_group_text;
 
     public static String DatabaseTab_name;
 

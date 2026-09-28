@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,26 +30,17 @@ public class UINavigatorMessages extends NLS {
     //object properties editor
 
     public static String toolbar_datasource_selector_empty;
-    public static String toolbar_datasource_selector_action_read_databases;
-    public static String toolbar_datasource_selector_combo_database_tooltip;
     public static String toolbar_datasource_selector_combo_datasource_tooltip;
-    public static String toolbar_datasource_selector_error_change_database_message;
-    public static String toolbar_datasource_selector_error_change_database_title;
-    public static String toolbar_datasource_selector_error_database_not_found;
-    public static String toolbar_datasource_selector_error_database_change_not_supported;
-    public static String toolbar_datasource_selector_resultset_segment_size;
-    public static String toolbar_datasource_selector_connected;
-    public static String toolbar_datasource_selector_all;
 
     public static String dialog_filter_global_link;
     public static String dialog_filter_list_exclude;
     public static String dialog_filter_list_include;
     public static String dialog_filter_title;
-    public static String dialog_filter_save_button;
     public static String dialog_filter_remove_button;
     public static String dialog_filter_save_label;
     public static String dialog_filter_name_label;
     public static String dialog_filter_hint_text;
+    public static String dialog_filter_objects_scope_hint_text;
 
     public static String actions_navigator__objects;
     public static String actions_navigator_hide_objects;
@@ -63,7 +53,6 @@ public class UINavigatorMessages extends NLS {
     public static String actions_navigator_create_folder_error_title;
     public static String actions_navigator_create_folder_folder_name;
     public static String actions_navigator_create_new;
-    public static String actions_navigator_delete_objects;
     public static String actions_navigator_delete;
     public static String actions_navigator_delete_script;
     public static String actions_navigator_edit;
@@ -77,13 +66,14 @@ public class UINavigatorMessages extends NLS {
     public static String actions_navigator_view;
     public static String actions_navigator_view_script_button;
     public static String actions_navigator_filter_objects;
-    public static String actions_navigator_search_tip;
     public static String actions_navigator_search_filter_connection_name;
     public static String actions_navigator_search_filter_connection_description;
     public static String actions_navigator_search_filter_container_name;
     public static String actions_navigator_search_filter_container_description;
     public static String actions_navigator_search_filter_object_name;
     public static String actions_navigator_search_filter_object_description;
+    public static String actions_navigator_search_filter_file_name;
+    public static String actions_navigator_search_filter_file_description;
     public static String actions_navigator_show_only_selected_objects;
     public static String actions_navigator_show_only_object;
     public static String actions_navigator_folder_name;
@@ -96,14 +86,15 @@ public class UINavigatorMessages extends NLS {
     public static String actions_navigator_rename_database_object;
     public static String actions_navigator_rename_database_object_exception_title;
     public static String actions_navigator_rename_database_object_exception_message;
-    
-
-    public static String dialog_project_create_wizard_error_already_exists;
+    public static String actions_navigator_configure_filters;
+    public static String actions_navigator_reset_search;
+    public static String navigator_node_action_connection_view_simple_tooltip;
+    public static String navigator_node_action_connection_view_advanced_tooltip;
+    public static String navigator_node_action_connection_view_custom_tooltip;
     public static String dialog_project_create_wizard_error_cannot_create;
     public static String dialog_project_create_wizard_error_cannot_create_message;
     public static String dialog_project_create_wizard_title;
     public static String dialog_project_goto_object_title;
-    public static String dialog_project_goto_object_checkbox_search_in_comments;
     
     public static String registry_entity_editor_descriptor_description;
     public static String registry_entity_editor_descriptor_name;
@@ -123,9 +114,12 @@ public class UINavigatorMessages extends NLS {
     public static String pref_page_database_general_label_show_tooltips;
     public static String pref_page_database_general_label_show_tooltips_tip;
     public static String pref_page_database_general_label_show_contents_in_tooltips;
+    public static String pref_page_ui_general_show_table_grid;
     public static String pref_page_database_general_label_show_contents_in_tooltips_tip;
     public static String pref_page_database_general_label_order_elements_alphabetically;
     public static String pref_page_database_general_label_order_elements_alphabetically_tip;
+    public static String pref_page_database_general_label_sort_case_insensitive;
+    public static String pref_page_database_general_label_sort_case_insensitive_tip;
     public static String pref_page_database_general_label_folders_first;
     public static String pref_page_database_general_label_folders_first_tip;
     public static String pref_page_database_general_label_show_host_name;
@@ -136,6 +130,10 @@ public class UINavigatorMessages extends NLS {
     public static String pref_page_database_general_label_show_statistics_tip;
     public static String pref_page_database_general_label_show_node_actions;
     public static String pref_page_database_general_label_show_node_actions_tip;
+    public static String dialog_connection_set_default_connection_settings;
+    public static String dialog_connection_set_default_connection_settings_tip;
+    public static String pref_page_database_general_label_show_child_count;
+    public static String pref_page_database_general_label_show_child_count_tip;
     public static String pref_page_database_general_label_color_all_nodes;
     public static String pref_page_database_general_label_color_all_nodes_tip;
     public static String pref_page_database_general_label_show_folder_placeholders;
@@ -167,23 +165,16 @@ public class UINavigatorMessages extends NLS {
     public static String pref_page_projects_settings_label_not_use_hidden_folders;
     public static String pref_page_projects_settings_label_not_store_resources_in_another_project;
     public static String pref_page_projects_settings_label_restart_require_refresh_global_settings;
-    public static String pref_page_projects_settings_description;
 
     public static String ui_navigator_loading_text_loading;
     public static String ui_properties_category_information;
     public static String ui_properties_category_information_tip;
-    public static String ui_properties_category_properties;
-    public static String ui_properties_category_properties_tip;
-    public static String ui_properties_category_structure;
     public static String ui_properties_task_add_folder;
     public static String ui_properties_task_add_node;
 
     public static String CreateLinkHandler_e_create_link_message;
     public static String CreateLinkHandler_e_create_link_title;
     public static String CreateLinkHandler_e_create_link_validation;
-
-    public static String dialog_select_datasource_error_message;
-    public static String dialog_select_datasource_error_title;
     public static String dialog_select_datasource_title;
 
     public static String controls_object_list_job_props_read;
@@ -196,10 +187,8 @@ public class UINavigatorMessages extends NLS {
     public static String editors_entity_read_expensive_props_action;
     public static String editors_entity_dialog_persist_title;
     public static String editors_entity_dialog_preview_title;
-    public static String editors_entity_monitor_add_folder;
-    public static String editors_entity_monitor_add_node;
-    public static String editors_entity_monitor_preview_changes;
     public static String editors_entity_properties_text;
+    public static String editors_entity_properties_name_tooltip;
     public static String editors_entity_properties_tooltip_suffix;
     public static String editors_entity_title_uninitialized;
     public static String editors_entity_title_initializing;
@@ -229,10 +218,6 @@ public class UINavigatorMessages extends NLS {
     public static String pref_page_target_button_use_datasource_settings;
     public static String pref_page_target_link_show_datasource_settings;
     public static String pref_page_target_link_show_global_settings;
-
-    public static String label_active_service_instance;
-    public static String label_choose_catalog;
-    public static String label_error_list;
     public static String label_instance;
 
     public static String error_deleting_multiple_objects_from_different_datasources_title;
@@ -249,8 +234,6 @@ public class UINavigatorMessages extends NLS {
     public static String confirm_deleting_delete_contents_checkbox;
     public static String confirm_deleting_delete_contents_checkbox_tooltip;
     public static String confirm_deleting_project_location_label;
-    public static String error_deleting_resource_title;
-    public static String error_deleting_resource_message;
     public static String question_no_sql_available;
     public static String error_sql_generation_title;
     public static String error_sql_generation_message;
@@ -269,8 +252,12 @@ public class UINavigatorMessages extends NLS {
     public static String navigator_project_explorer_columns_modified_description;
     public static String navigator_project_explorer_columns_type_text;
     public static String navigator_project_explorer_columns_type_description;
-    public static String navigator_filtered_nodes_text;
-    public static String navigator_filtered_nodes_tip;
+    public static String navigator_nodes_filtered_by_settings_text;
+    public static String navigator_nodes_filtered_by_settings_tip;
+    public static String navigator_nodes_filtered_by_search_text;
+    public static String navigator_nodes_filtered_by_search_tip;
+    public static String navigator_nodes_filtered_by_search_and_filter_text;
+    public static String navigator_nodes_filtered_by_search_and_filter_tip;
 
     public static String datasource_list_action_empty;
     public static String filter_connection_name_placeholder;
@@ -294,6 +281,9 @@ public class UINavigatorMessages extends NLS {
     public static String navigator_provider_element_tooltip_datasource_read_only;
     public static String navigator_provider_element_tooltip_datasource_provided;
     public static String navigator_provider_element_tooltip_datasource_error;
+
+    public static String confirm_commit_after_defaults_change_title;
+    public static String confirm_commit_after_defaults_change_message;
 
     static {
         // initialize resource bundle

@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +18,7 @@ package org.jkiss.dbeaver.ui.preferences;
 
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.eclipse.ui.IWorkbench;
@@ -48,8 +46,7 @@ import java.util.StringJoiner;
 /**
  * PrefPageDrivers
  */
-public class PrefPageDrivers extends AbstractPrefPage implements IWorkbenchPreferencePage, IWorkbenchPropertyPage
-{
+public class PrefPageDrivers extends AbstractPrefPage implements IWorkbenchPreferencePage, IWorkbenchPropertyPage {
     private static final Log log = Log.getLog(PrefPageDrivers.class);
 
     public static final String PAGE_ID = "org.jkiss.dbeaver.preferences.drivers"; //$NON-NLS-1$
@@ -77,15 +74,29 @@ public class PrefPageDrivers extends AbstractPrefPage implements IWorkbenchPrefe
         DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
 
         {
-            Group settings = UIUtils.createControlGroup(composite, UIConnectionMessages.pref_page_ui_general_group_settings, 2, GridData.FILL_HORIZONTAL, 300);
+            Composite settings = UIUtils.createTitledComposite(
+                composite,
+                UIConnectionMessages.pref_page_ui_general_group_settings,
+                2,
+                GridData.FILL_HORIZONTAL,
+                300
+            );
             versionUpdateCheck = UIUtils.createCheckbox(
-                    settings,
-                    UIConnectionMessages.pref_page_ui_general_check_new_driver_versions,
-                    store.getBoolean(ModelPreferences.UI_DRIVERS_VERSION_UPDATE));
+                settings,
+                UIConnectionMessages.pref_page_ui_general_check_new_driver_versions,
+                UIConnectionMessages.pref_page_ui_general_check_new_driver_versions_tip,
+                store.getBoolean(ModelPreferences.UI_DRIVERS_VERSION_UPDATE), 1
+            );
         }
 
         {
-            Group proxyObjects = UIUtils.createControlGroup(composite, UIConnectionMessages.pref_page_ui_general_group_http_proxy, 4, GridData.FILL_HORIZONTAL | GridData.VERTICAL_ALIGN_BEGINNING, 300);
+            Composite proxyObjects = UIUtils.createTitledComposite(
+                composite,
+                UIConnectionMessages.pref_page_ui_general_group_http_proxy,
+                4,
+                GridData.FILL_HORIZONTAL | GridData.VERTICAL_ALIGN_BEGINNING,
+                300
+            );
             proxyHostText = UIUtils.createLabelText(
                 proxyObjects,
                 UIConnectionMessages.pref_page_ui_general_label_proxy_host,
@@ -104,51 +115,51 @@ public class PrefPageDrivers extends AbstractPrefPage implements IWorkbenchPrefe
         }
 
         {
-            Group drivers = UIUtils.createControlGroup(composite, UIConnectionMessages.pref_page_drivers_group_location, 2, GridData.FILL_HORIZONTAL, 300);
+            Composite drivers = UIUtils.createTitledComposite(
+                composite,
+                UIConnectionMessages.pref_page_drivers_group_location,
+                2,
+                GridData.FILL_HORIZONTAL,
+                300
+            );
             customDriversHome = DialogUtils.createOutputFolderChooser(drivers, UIConnectionMessages.pref_page_drivers_local_folder, null, null, null, false, null);
             customDriversHome.setText(store.getString(ModelPreferences.UI_DRIVERS_HOME));
         }
 
         {
-            Group repoGroup = UIUtils.createControlGroup(composite, UIConnectionMessages.pref_page_drivers_group_file_repositories, 2, GridData.FILL_HORIZONTAL, 300);
+            Composite repoGroup = UIUtils.createTitledComposite(
+                composite,
+                UIConnectionMessages.pref_page_drivers_group_file_repositories,
+                2,
+                GridData.FILL_HORIZONTAL,
+                300
+            );
             sourceList = new List(repoGroup, SWT.BORDER | SWT.SINGLE | SWT.H_SCROLL | SWT.V_SCROLL);
             sourceList.setLayoutData(new GridData(GridData.FILL_BOTH));
 
             final ToolBar toolbar = new ToolBar(repoGroup, SWT.VERTICAL);
             toolbar.setLayoutData(new GridData(GridData.VERTICAL_ALIGN_BEGINNING));
-            UIUtils.createToolItem(toolbar, UIConnectionMessages.pref_page_drivers_button_add, UIIcon.ADD, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e)
-                {
+            UIUtils.createToolItem(toolbar, UIConnectionMessages.pref_page_drivers_button_add, UIIcon.ADD, SelectionListener.widgetSelectedAdapter(e -> {
                     String url = EnterNameDialog.chooseName(getShell(), UIConnectionMessages.pref_page_drivers_label_enter_drivers_location_url, "http://");
                     if (url != null) {
                         sourceList.add(url);
                     }
-                }
-            });
-            final ToolItem removeButton = UIUtils.createToolItem(toolbar, UIConnectionMessages.pref_page_drivers_button_remove, UIIcon.DELETE, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e)
-                {
+                }));
+            final ToolItem removeButton = UIUtils.createToolItem(toolbar, UIConnectionMessages.pref_page_drivers_button_remove, UIIcon.DELETE, SelectionListener.widgetSelectedAdapter(e -> {
                     final int index = sourceList.getSelectionIndex();
                     sourceList.remove(index);
                     sourceList.select(CommonUtils.clamp(index, 0, sourceList.getItemCount() - 1));
                     sourceList.notifyListeners(SWT.Selection, new Event());
-                }
-            });
+                }));
             removeButton.setEnabled(false);
 
-            sourceList.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e)
-                {
+            sourceList.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     if (sourceList.getSelectionIndex() >= 0) {
                         removeButton.setEnabled(sourceList.getItemCount() > 1);
                     } else {
                         removeButton.setEnabled(false);
                     }
-                }
-            });
+                }));
             Control tip = UIUtils.createInfoLabel(repoGroup, UIConnectionMessages.pref_page_drivers_repo_info);
             tip.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_BEGINNING, GridData.VERTICAL_ALIGN_BEGINNING, false, false, 2, 1));
         }

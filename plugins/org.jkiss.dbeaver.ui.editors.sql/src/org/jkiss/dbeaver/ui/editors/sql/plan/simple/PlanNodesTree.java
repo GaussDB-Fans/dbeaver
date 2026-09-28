@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,18 +18,18 @@ package org.jkiss.dbeaver.ui.editors.sql.plan.simple;
 
 import org.eclipse.jface.viewers.ITreeContentProvider;
 import org.eclipse.jface.viewers.TreeViewer;
-import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.IWorkbenchSite;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.exec.plan.DBCPlan;
 import org.jkiss.dbeaver.model.exec.plan.DBCPlanNode;
 import org.jkiss.dbeaver.model.exec.plan.DBCPlanNodeKind;
 import org.jkiss.dbeaver.model.struct.DBSObject;
+import org.jkiss.dbeaver.ui.BaseThemeSettings;
 import org.jkiss.dbeaver.ui.LoadingJob;
-import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.ObjectViewerRenderer;
 import org.jkiss.dbeaver.ui.navigator.actions.NavigatorHandlerObjectOpen;
 import org.jkiss.dbeaver.ui.navigator.itemlist.DatabaseObjectListControl;
@@ -48,17 +48,12 @@ public class PlanNodesTree extends DatabaseObjectListControl<DBCPlanNode> {
     private String query;
     private DBPDataSource dataSource;
 
-    private static final String CONFIG_COLOR_INDEXSCAN_BACKGROUND = "org.jkiss.dbeaver.sql.plan.view.color.indexscan.background";
-    private static final String CONFIG_COLOR_INDEXSCAN_FOREGROUND = "org.jkiss.dbeaver.sql.plan.view.color.indexscan.foreground";
-    private static final String CONFIG_COLOR_TABLESCAN_BACKGROUND = "org.jkiss.dbeaver.sql.plan.view.color.tablescan.background";
-    private static final String CONFIG_COLOR_TABLESCAN_FOREGROUND = "org.jkiss.dbeaver.sql.plan.view.color.tablescan.foreground";
-
-    public PlanNodesTree(Composite parent, int style, IWorkbenchSite site)
-    {
+    public PlanNodesTree(@NotNull Composite parent, int style, @NotNull IWorkbenchSite site) {
         super(parent, style, site, CONTENT_PROVIDER);
         setFitWidth(true);
     }
 
+    @NotNull
     @Override
     protected ObjectViewerRenderer createRenderer()
     {
@@ -113,8 +108,8 @@ public class PlanNodesTree extends DatabaseObjectListControl<DBCPlanNode> {
         @Override
         public Object[] getChildren(Object parentElement)
         {
-            if (parentElement instanceof DBCPlanNode) {
-                Collection<? extends DBCPlanNode> nestedNodes = ((DBCPlanNode) parentElement).getNested();
+            if (parentElement instanceof DBCPlanNode pn) {
+                Collection<? extends DBCPlanNode> nestedNodes = pn.getNested();
                 return CommonUtils.isEmpty(nestedNodes) ? new Object[0] : nestedNodes.toArray();
             }
             return null;
@@ -130,19 +125,8 @@ public class PlanNodesTree extends DatabaseObjectListControl<DBCPlanNode> {
         }
 
         @Override
-        public boolean hasChildren(Object element)
-        {
+        public boolean hasChildren(Object element) {
             return element instanceof DBCPlanNode && !CommonUtils.isEmpty(((DBCPlanNode) element).getNested());
-        }
-
-        @Override
-        public void dispose()
-        {
-        }
-
-        @Override
-        public void inputChanged(Viewer viewer, Object oldInput, Object newInput)
-        {
         }
 
     };
@@ -164,23 +148,20 @@ public class PlanNodesTree extends DatabaseObjectListControl<DBCPlanNode> {
 
     }
 
+    @Nullable
     @Override
     protected Color getObjectBackground(DBCPlanNode item) {
         if (item.getNodeKind() == DBCPlanNodeKind.TABLE_SCAN) {
-            return UIUtils.getColorRegistry().get(CONFIG_COLOR_TABLESCAN_BACKGROUND);
+            return BaseThemeSettings.instance.colorError;
         } else if (item.getNodeKind() == DBCPlanNodeKind.INDEX_SCAN) {
-            return UIUtils.getColorRegistry().get(CONFIG_COLOR_INDEXSCAN_BACKGROUND);
+            return BaseThemeSettings.instance.colorWarning;
         }
         return super.getObjectBackground(item);
     }
 
+    @Nullable
     @Override
     protected Color getObjectForeground(DBCPlanNode item) {
-        if (item.getNodeKind() == DBCPlanNodeKind.TABLE_SCAN) {
-            return UIUtils.getColorRegistry().get(CONFIG_COLOR_TABLESCAN_FOREGROUND);
-        } else if (item.getNodeKind() == DBCPlanNodeKind.INDEX_SCAN) {
-            return UIUtils.getColorRegistry().get(CONFIG_COLOR_INDEXSCAN_FOREGROUND);
-        }
         return super.getObjectForeground(item);
     }
 

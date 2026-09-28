@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,12 +32,15 @@ public class RegistryMessages extends NLS {
     public static String dialog_data_source_synchronization_fail_local_message;
     public static String dialog_data_source_synchronization_fail_remote_message;
 
+    public static String data_source_sync_unit_name;
+
     public static String navigator_settings_preset_simple_view_name;
     public static String navigator_settings_preset_simple_view_description;
     public static String navigator_settings_preset_advanced_view_name;
     public static String navigator_settings_preset_advanced_view_description;
     public static String navigator_settings_preset_custom_view_name;
     public static String navigator_settings_preset_custom_view_description;
+    public static String navigator_settings_customize_view;
     public static String project_description_comment;
 
     public static String project_open_cannot_read_credentials_title;
@@ -46,6 +48,10 @@ public class RegistryMessages extends NLS {
     public static String project_open_cannot_read_credentials_button_text;
     public static String project_open_cannot_read_configuration_title;
     public static String project_open_cannot_read_configuration_message;
+
+    public static String connection_add_shell_cmd_context_project;
+    public static String connection_add_shell_cmd_context_data_source;
+    public static String connection_add_shell_cmd_context_event_type;
 
     static {
         // initialize resource bundle

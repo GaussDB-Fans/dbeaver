@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import org.eclipse.core.filesystem.IFileStore;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IContributionManager;
-import org.eclipse.jface.action.Separator;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
@@ -33,13 +32,11 @@ import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataKind;
 import org.jkiss.dbeaver.model.DBPMessageType;
 import org.jkiss.dbeaver.model.DBValueFormatting;
-import org.jkiss.dbeaver.model.data.DBDContent;
-import org.jkiss.dbeaver.model.data.DBDContentCached;
-import org.jkiss.dbeaver.model.data.DBDContentStorage;
-import org.jkiss.dbeaver.model.data.DBDDisplayFormat;
+import org.jkiss.dbeaver.model.data.*;
 import org.jkiss.dbeaver.model.data.storage.ExternalContentStorage;
 import org.jkiss.dbeaver.model.exec.DBCException;
 import org.jkiss.dbeaver.model.preferences.DBPPropertyManager;
+import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.ShellUtils;
@@ -79,11 +76,20 @@ public class ContentValueManager extends BaseValueManager {
 
     public static final String PROP_CATEGORY_CONTENT = "CONTENT";
 
-    public static void contributeContentActions(@NotNull IContributionManager manager, @NotNull final IValueController controller, final IValueEditor activeEditor)
-            throws DBCException
-    {
-        if (controller.getValue() instanceof DBDContent) {
-            if (!((DBDContent) controller.getValue()).isNull()) {
+    @NotNull
+    public static DBDContent copyContentForEdit(@NotNull DBRProgressMonitor monitor, @NotNull DBDContent content)
+        throws DBCException {
+        // Copy when supported; otherwise preserve editing without capturing the value in undo history.
+        return content instanceof DBDValueCloneable cloneable ? (DBDContent) cloneable.cloneValue(monitor) : content;
+    }
+
+    public static void contributeContentActions(
+        @NotNull IContributionManager manager,
+        @NotNull final IValueController controller,
+        final IValueEditor activeEditor
+    ) {
+        if (controller.getValue() instanceof DBDContent content) {
+            if (!content.isNull()) {
                 manager.add(new Action(ResultSetMessages.model_jdbc_save_to_file_, DBeaverIcons.getImageDescriptor(UIIcon.SAVE_AS)) {
                     @Override
                     public void run() {
@@ -103,8 +109,8 @@ public class ContentValueManager extends BaseValueManager {
                             boolean isExternalFileOpened = false;
                             if (activeEditor != null) {
                                 IStreamValueEditor<Control> streamEditor = ((ContentPanelEditor) activeEditor).getStreamEditor();
-                                if (streamEditor instanceof IStreamValueEditorPersistent) {
-                                    Path externalFilePath = ((IStreamValueEditorPersistent) streamEditor).getExternalFilePath(activeEditor.getControl());
+                                if (streamEditor instanceof IStreamValueEditorPersistent svep) {
+                                    Path externalFilePath = svep.getExternalFilePath(activeEditor.getControl());
                                     if (externalFilePath != null) {
                                         isExternalFileOpened = openExternalFile(externalFilePath);
                                     }
@@ -117,8 +123,8 @@ public class ContentValueManager extends BaseValueManager {
                             String str = controller.getValueHandler()
                                     .getValueDisplayString(controller.getValueType(), 
                                             controller.getValue(), DBDDisplayFormat.EDIT);
-                            String charset = 
-                                    DBValueFormatting.getDefaultBinaryFileEncoding(controller.getExecutionContext().getDataSource());
+                            String charset = DBValueFormatting.getDefaultBinaryFileEncoding(
+                                controller.getExecutionContext().getDataSource());
                             byte[] bytes = str.getBytes(charset);
                             openOctetStream(bytes);
                         }
@@ -128,6 +134,11 @@ public class ContentValueManager extends BaseValueManager {
                         DBWorkbench.getPlatformUI().showError("Error", 
                                 "Unexpected error while trying to open the selected value", e);
                     }
+                }
+
+                @Override
+                public boolean isEnabled() {
+                    return !controller.isReadOnly();
                 }
             });
             manager.add(new Action(ResultSetMessages.model_jdbc_load_from_file_, DBeaverIcons.getImageDescriptor(UIIcon.LOAD)) {
@@ -143,8 +154,12 @@ public class ContentValueManager extends BaseValueManager {
                         }
                     }
                 }
+
+                @Override
+                public boolean isEnabled() {
+                    return !controller.isReadOnly();
+                }
             });
-            manager.add(new Separator());
         }
     }
 
@@ -152,7 +167,7 @@ public class ContentValueManager extends BaseValueManager {
         return Files.exists(path) && ShellUtils.openExternalFile(path);
     }
 
-    private static void getDBDContent(Object value) throws IOException, DBCException {
+    private static void getDBDContent(Object value) throws IOException {
         DBDContent content = (DBDContent) value;
         try {
             UIUtils.runInProgressService(monitor -> {
@@ -185,35 +200,36 @@ public class ContentValueManager extends BaseValueManager {
     }
 
     private static void openOctetStream(byte[] data) throws IOException {
-        File tmpFile = File.createTempFile("dbtmp", ".octet-stream");
-        FileOutputStream fos = new FileOutputStream(tmpFile);
+        Path tmpFile = Files.createTempFile("dbtmp", ".octet-stream");
+        OutputStream fos = Files.newOutputStream(tmpFile);
         if (data == null) {
             DBWorkbench.getPlatformUI().showError("Open Content", "Raw value was null");
             fos.close();
+            return;
         }
         if (data.length == 0) {
             log.info("file has no content");
             fos.close();
-            tmpFile.delete();
+            Files.delete(tmpFile);
         } else {
             fos.write(data);
             fos.close();
             if (RuntimeUtils.isWindows()) {
                 UIUtils.syncExec(() -> {
                     try {
-                        IFileStore store = EFS.getLocalFileSystem().getStore(tmpFile.toURI());
+                        IFileStore store = EFS.getLocalFileSystem().getStore(tmpFile.toUri());
                         IDE.openEditorOnFileStore(UIUtils.getActiveWorkbenchWindow().getActivePage(), store);
                     } catch (CoreException e) {
                         log.error("Error while opening octet stream", e);
                     }
                 });
             } else {
-                ShellUtils.openExternalFile(tmpFile.toPath());
+                ShellUtils.openExternalFile(tmpFile);
             }
 
 
             // delete the file when the user closes the DBeaver application
-            tmpFile.deleteOnExit();
+            tmpFile.toFile().deleteOnExit();
         }
     }
 
@@ -236,29 +252,35 @@ public class ContentValueManager extends BaseValueManager {
         }
     }
 
-    public static boolean loadFromFile(final IValueController controller)
-    {
-        if (!(controller.getValue() instanceof DBDContent)) {
+    public static boolean loadFromFile(@NotNull IValueController controller) {
+        if (!(controller.getValue() instanceof DBDContent value)) {
             log.error(ResultSetMessages.model_jdbc_bad_content_value_ + controller.getValue());
             return false;
         }
 
         Shell shell = UIUtils.getShell(controller.getValueSite());
-        final File openFile = DialogUtils.openFile(shell);
+        Path openFile = DialogUtils.openFile(shell);
         if (openFile == null) {
             return false;
         }
-        final DBDContent value = (DBDContent)controller.getValue();
         UIUtils.runInUI(PlatformUI.getWorkbench().getActiveWorkbenchWindow(), monitor -> {
             try {
                 DBDContentStorage storage;
                 if (ContentUtils.isTextContent(value)) {
-                    storage = new ExternalContentStorage(DBWorkbench.getPlatform(), openFile.toPath(), GeneralUtils.UTF8_ENCODING);
+                    storage = new ExternalContentStorage(DBWorkbench.getPlatform(), openFile, GeneralUtils.UTF8_ENCODING);
                 } else {
-                    storage = new ExternalContentStorage(DBWorkbench.getPlatform(), openFile.toPath());
+                    storage = new ExternalContentStorage(DBWorkbench.getPlatform(), openFile);
                 }
-                value.updateContents(monitor, storage);
-                controller.updateValue(value, true);
+                DBDContent editedValue = copyContentForEdit(monitor, value);
+                try {
+                    editedValue.updateContents(monitor, storage);
+                } catch (DBException e) {
+                    if (editedValue != value) {
+                        editedValue.release();
+                    }
+                    throw e;
+                }
+                controller.updateValue(editedValue, true);
             } catch (Exception e) {
                 throw new InvocationTargetException(e);
             }
@@ -266,19 +288,18 @@ public class ContentValueManager extends BaseValueManager {
         return true;
     }
 
-    public static void saveToFile(IValueController controller)
+    public static void saveToFile(@NotNull IValueController controller)
     {
-        if (!(controller.getValue() instanceof DBDContent)) {
+        if (!(controller.getValue() instanceof DBDContent value)) {
             log.error(ResultSetMessages.model_jdbc_bad_content_value_ + controller.getValue());
             return;
         }
 
         Shell shell = UIUtils.getShell(controller.getValueSite());
-        final File saveFile = DialogUtils.selectFileForSave(shell, controller.getValueName());
+        Path saveFile = DialogUtils.selectFileForSave(shell, controller.getValueName());
         if (saveFile == null) {
             return;
         }
-        final DBDContent value = (DBDContent)controller.getValue();
         try {
             UIUtils.runInProgressService(monitor -> {
                 try {
@@ -286,11 +307,10 @@ public class ContentValueManager extends BaseValueManager {
                     if (ContentUtils.isTextContent(value)) {
                         try (Reader cr = storage.getContentReader()) {
                             ContentUtils.saveContentToFile(
-                                    cr,
-                                    saveFile,
-                                    GeneralUtils.UTF8_ENCODING,
-                                    monitor
-                                    );
+                                cr,
+                                saveFile,
+                                GeneralUtils.UTF8_ENCODING,
+                                monitor);
                         }
                     } else {
                         try (InputStream cs = storage.getContentStream()) {
@@ -305,7 +325,7 @@ public class ContentValueManager extends BaseValueManager {
         catch (InvocationTargetException e) {
             DBWorkbench.getPlatformUI().showError(
                     ResultSetMessages.model_jdbc_could_not_save_content,
-                    ResultSetMessages.model_jdbc_could_not_save_content_to_file_ + saveFile.getAbsolutePath() + "'", //$NON-NLS-2$
+                    ResultSetMessages.model_jdbc_could_not_save_content_to_file_ + saveFile.toAbsolutePath() + "'", //$NON-NLS-2$
                     e.getTargetException());
         }
         catch (InterruptedException e) {
@@ -314,26 +334,27 @@ public class ContentValueManager extends BaseValueManager {
     }
 
     @Override
-    public void contributeActions(@NotNull IContributionManager manager, @NotNull final IValueController controller, @Nullable IValueEditor activeEditor)
-            throws DBCException
-    {
+    public void contributeActions(
+        @NotNull IContributionManager manager,
+        @NotNull final IValueController controller,
+        @Nullable IValueEditor activeEditor
+    ) throws DBCException {
         super.contributeActions(manager, controller, activeEditor);
         contributeContentActions(manager, controller, activeEditor);
     }
 
     @Override
-    public void contributeProperties(@NotNull DBPPropertyManager propertySource, @NotNull IValueController controller)
-    {
+    public void contributeProperties(@NotNull DBPPropertyManager propertySource, @NotNull IValueController controller) {
         super.contributeProperties(propertySource, controller);
         try {
             Object value = controller.getValue();
-            if (value instanceof DBDContent) {
+            if (value instanceof DBDContent content) {
                 propertySource.addProperty(
                         PROP_CATEGORY_CONTENT,
                         "content_type", //$NON-NLS-1$
                         ResultSetMessages.model_jdbc_content_type,
-                        ((DBDContent)value).getContentType());
-                final long contentLength = ((DBDContent) value).getContentLength();
+                    content.getContentType());
+                long contentLength = content.getContentLength();
                 if (contentLength >= 0) {
                     propertySource.addProperty(
                             PROP_CATEGORY_CONTENT,
@@ -355,28 +376,26 @@ public class ContentValueManager extends BaseValueManager {
     }
 
     @Override
-    public IValueEditor createEditor(@NotNull final IValueController controller)
-            throws DBException
-    {
+    public IValueEditor createEditor(@NotNull final IValueController controller) throws DBException {
         switch (controller.getEditType()) {
-        case INLINE:
-            // Open inline/panel editor
-            Object value = controller.getValue();
-            if (controller.getValueType().getDataKind() == DBPDataKind.STRING) {
-                return new StringInlineEditor(controller);
-            } else if (value instanceof DBDContentCached &&
-                    ContentUtils.isTextValue(((DBDContentCached) value).getCachedValue()))
-            {
-                return new ContentInlineEditor(controller);
-            } else {
+            case INLINE:
+                // Open inline/panel editor
+                Object value = controller.getValue();
+                if (controller.getValueType().getDataKind() == DBPDataKind.STRING) {
+                    return new StringInlineEditor(controller);
+                } else if (value instanceof DBDContentCached &&
+                        ContentUtils.isTextValue(((DBDContentCached) value).getCachedValue()))
+                {
+                    return new ContentInlineEditor(controller);
+                } else {
+                    return null;
+                }
+            case EDITOR:
+                return openContentEditor(controller);
+            case PANEL:
+                return new ContentPanelEditor(controller);
+            default:
                 return null;
-            }
-        case EDITOR:
-            return openContentEditor(controller);
-        case PANEL:
-            return new ContentPanelEditor(controller);
-        default:
-            return null;
         }
     }
 

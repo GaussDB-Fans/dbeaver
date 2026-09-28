@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Schema file written by PDE -->
+<schema targetNamespace="org.jkiss.dbeaver.model.cli" xmlns="http://www.w3.org/2001/XMLSchema">
+<annotation>
+      <appInfo>
+         <meta.schema plugin="org.jkiss.dbeaver.model.cli" id="org.jkiss.dbeaver.commandLine" name="Command line parameters extension"/>
+      </appInfo>
+      <documentation>Plugin Service</documentation>
+   </annotation>
+
+   <element name="extension">
+      <annotation><appInfo><meta.element/></appInfo></annotation>
+      <complexType>
+         <choice minOccurs="0" maxOccurs="unbounded">
+            <element ref="parameter"/>
+            <element ref="transformer"/>
+         </choice>
+         <attribute name="point" type="string" use="required"/>
+      </complexType>
+   </element>
+
+   <element name="parameter">
+      <complexType>
+          <attribute name="name" type="string"/>
+          <attribute name="longName" type="string"/>
+          <attribute name="description" type="string"/>
+          <attribute name="hasArg" type="boolean"/>
+          <attribute name="exitAfterExecute" type="boolean"/>
+          <attribute name="exclusiveMode" type="boolean"/>
+          <attribute name="forceNewInstance" type="boolean"/>
+          <attribute name="replace" type="string">
+             <annotation><appInfo><meta.attribute kind="java"/></appInfo></annotation>
+          </attribute>
+
+          <attribute name="handler" type="string" use="required">
+            <annotation>
+               <appInfo>
+                  <meta.attribute kind="java"/>
+               </appInfo>
+            </annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+   <element name="transformer">
+      <complexType>
+         <attribute name="transformer" type="string" use="required">
+            <annotation><appInfo><meta.attribute kind="java" basedOn=":picocli.CommandLine$IModelTransformer"/></appInfo></annotation>
+         </attribute>
+         <attribute name="command" type="string">
+            <annotation><appInfo><meta.attribute kind="java"/></appInfo></annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+
+
+
+
+
+</schema>

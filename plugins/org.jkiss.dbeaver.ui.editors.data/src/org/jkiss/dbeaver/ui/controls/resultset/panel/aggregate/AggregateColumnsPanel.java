@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,7 @@ import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionProvider;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.dnd.TextTransfer;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.code.NotNull;
@@ -36,12 +35,12 @@ import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
 import org.jkiss.dbeaver.model.data.aggregate.IAggregateFunction;
 import org.jkiss.dbeaver.registry.functions.AggregateFunctionDescriptor;
 import org.jkiss.dbeaver.registry.functions.FunctionsRegistry;
-import org.jkiss.dbeaver.ui.DBeaverIcons;
-import org.jkiss.dbeaver.ui.DataEditorFeatures;
-import org.jkiss.dbeaver.ui.UIIcon;
-import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.*;
+import org.jkiss.dbeaver.ui.controls.ToolbarSeparatorContribution;
 import org.jkiss.dbeaver.ui.controls.resultset.*;
 import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
+import org.jkiss.dbeaver.ui.controls.resultset.panel.ResultSetPanelBase;
+import org.jkiss.dbeaver.ui.internal.UIMessages;
 
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
@@ -52,7 +51,7 @@ import java.util.stream.Collectors;
 /**
  * RSV value view panel
  */
-public class AggregateColumnsPanel implements IResultSetPanel {
+public class AggregateColumnsPanel extends ResultSetPanelBase {
 
     private static final Log log = Log.getLog(AggregateColumnsPanel.class);
 
@@ -113,12 +112,8 @@ public class AggregateColumnsPanel implements IResultSetPanel {
         this.aggregateTable.setMenu(menuMgr.createContextMenu(this.aggregateTable));
         this.aggregateTable.addDisposeListener(e -> menuMgr.dispose());
 
-        aggregateTable.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                presentation.getController().updatePanelActions();
-            }
-        });
+        aggregateTable.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+            presentation.getController().updatePanelActions()));
 
         return this.aggregateTable;
     }
@@ -284,7 +279,7 @@ public class AggregateColumnsPanel implements IResultSetPanel {
             }
         }
 
-        IAggregateFunction[] funcs = funcMap.keySet().toArray(new IAggregateFunction[funcMap.size()]);
+        IAggregateFunction[] funcs = funcMap.keySet().toArray(new IAggregateFunction[0]);
         int[] funcCount = new int[funcs.length];
         for (Object element : values) {
             for (int i = 0; i < funcs.length; i++) {
@@ -321,12 +316,13 @@ public class AggregateColumnsPanel implements IResultSetPanel {
         aggregateTable.removeAll();
     }
 
-    private void fillToolBar(IContributionManager contributionManager)
-    {
-        contributionManager.add(new AddFunctionAction());
+    private void fillToolBar(IContributionManager contributionManager) {
+        ActionContributionItem item = new ActionContributionItem(new AddFunctionAction());
+        item.setMode(ActionContributionItem.MODE_FORCE_TEXT);
+        contributionManager.add(item);
         contributionManager.add(new RemoveFunctionAction());
         contributionManager.add(new ResetFunctionsAction());
-        contributionManager.add(new Separator());
+        contributionManager.add(contributionManager instanceof IToolBarManager ? new ToolbarSeparatorContribution(true) : new Separator());
         contributionManager.add(new GroupByColumnsAction());
         contributionManager.add(new ValueTypeToggleAction());
     }
@@ -365,24 +361,32 @@ public class AggregateColumnsPanel implements IResultSetPanel {
 
     private class AddFunctionAction extends Action {
         public AddFunctionAction() {
-            super(ResultSetMessages.aggregate_columns_add_function_text, DBeaverIcons.getImageDescriptor(UIIcon.ADD));
+            super(UIMessages.button_add, DBeaverIcons.getImageDescriptor(UIIcon.ADD));
+
+            setMenuCreator(new MenuCreator(widget -> createMenuManager()));
         }
 
-        @Override
-        public void run() {
+        private MenuManager createMenuManager() {
             List<AggregateFunctionDescriptor> missingFunctions = new ArrayList<>();
             for (AggregateFunctionDescriptor func : FunctionsRegistry.getInstance().getAggregateFunctions()) {
                 if (!enabledFunctions.contains(func)) {
                     missingFunctions.add(func);
                 }
             }
+            MenuManager menuManager = new MenuManager();
             if (!missingFunctions.isEmpty()) {
-                Point location = aggregateTable.getDisplay().getCursorLocation();
-                MenuManager menuManager = new MenuManager();
-
                 for (final AggregateFunctionDescriptor func : missingFunctions) {
                     menuManager.add(new AddFunctionItemAction(func));
                 }
+            }
+            return menuManager;
+        }
+
+        @Override
+        public void run() {
+            MenuManager menuManager = createMenuManager();
+            if (!menuManager.isEmpty()) {
+                Point location = aggregateTable.getDisplay().getCursorLocation();
 
                 final Menu contextMenu = menuManager.createContextMenu(aggregateTable);
                 contextMenu.setLocation(location);
@@ -450,7 +454,7 @@ public class AggregateColumnsPanel implements IResultSetPanel {
         public void run() {
             StringBuilder result = new StringBuilder();
             for (TreeItem item : aggregateTable.getSelection()) {
-                if (result.length() > 0) result.append("\n");
+                if (!result.isEmpty()) result.append("\n");
                 if (item.getData() instanceof AggregateFunctionDescriptor) {
                     result.append(item.getText(1));
                 } else {
@@ -471,12 +475,12 @@ public class AggregateColumnsPanel implements IResultSetPanel {
             StringBuilder result = new StringBuilder();
             if (!groupByColumns) {
                 for (TreeItem item : aggregateTable.getItems()) {
-                    if (result.length() > 0) result.append("\n");
+                    if (!result.isEmpty()) result.append("\n");
                     result.append(item.getText(0)).append("=").append(item.getText(1));
                 }
             } else {
                 for (TreeItem item : aggregateTable.getItems()) {
-                    if (result.length() > 0) result.append("\n");
+                    if (!result.isEmpty()) result.append("\n");
                     result.append(item.getText(0));
                     for (TreeItem funcItem : item.getItems()) {
                         result.append("\n\t");

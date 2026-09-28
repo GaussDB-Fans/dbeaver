@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.eclipse.ui.IWorkbenchPart;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
+import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.struct.DBSDataContainer;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
@@ -41,6 +42,7 @@ public class ResultSetPropertyTester extends PropertyTester
     public static final String PROP_HAS_MORE_DATA = "hasMoreData";
     public static final String PROP_HAS_FILTERS = "hasfilters";
     public static final String PROP_CAN_SAVE_FILTERS = "canSaveFilters";
+    public static final String PROP_HAS_SAVED_FILTER = "hasSavedFilter";
     public static final String PROP_CAN_COPY = "canCopy";
     public static final String PROP_CAN_PASTE = "canPaste";
     public static final String PROP_CAN_CUT = "canCut";
@@ -50,6 +52,8 @@ public class ResultSetPropertyTester extends PropertyTester
     public static final String PROP_CAN_NAVIGATE_LINK = "canNavigateLink";
     public static final String PROP_SUPPORTS_COUNT = "supportsCount";
     public static final String PROP_CAN_NAVIGATE_HISTORY = "canNavigateHistory";
+    public static final String PROP_CAN_UNDO = "canUndo";
+    public static final String PROP_CAN_REDO = "canRedo";
     public static final String PROP_EDITABLE = "editable";
     private static final String PROP_CHANGED = "changed";
     private static final String PROP_CAN_PERSIST_DATA = "canPersistData";
@@ -85,6 +89,8 @@ public class ResultSetPropertyTester extends PropertyTester
                 return rsv.getModel().getDataFilter().hasFilters();
             case PROP_CAN_SAVE_FILTERS:
                 return rsv.getDataContainer() instanceof DBSEntity;
+            case PROP_HAS_SAVED_FILTER:
+                return rsv.hasSavedDataFilter();
             case PROP_CAN_COPY:
                 return !actionsDisabled && rsv.getModel().hasData();
             case PROP_CAN_PASTE:
@@ -98,6 +104,9 @@ public class ResultSetPropertyTester extends PropertyTester
             }
             case PROP_CAN_MOVE: {
                 if (actionsDisabled || !rsv.supportsNavigation()) return false;
+                if (ResultSetViewer.DATA_EDIT_DISABLED) {
+                    return false;
+                }
                 ResultSetRow currentRow = rsv.getCurrentRow();
                 if ("back".equals(expectedValue)) {
                     return currentRow != null && currentRow.getVisualNumber() > 0;
@@ -108,6 +117,9 @@ public class ResultSetPropertyTester extends PropertyTester
             }
             case PROP_EDITABLE: {
                 if (actionsDisabled || !rsv.hasData() || !rsv.supportsEdit()) {
+                    return false;
+                }
+                if (ResultSetViewer.DATA_EDIT_DISABLED) {
                     return false;
                 }
                 if ("edit".equals(expectedValue) || "inline".equals(expectedValue)) {
@@ -163,8 +175,21 @@ public class ResultSetPropertyTester extends PropertyTester
                     }
                 }
                 return false;
-            case PROP_CAN_PERSIST_DATA:
-                return !rsv.getModel().isUpdateInProgress();
+            case PROP_CAN_UNDO:
+                return !actionsDisabled && rsv.canUndoCellEdit();
+            case PROP_CAN_REDO:
+                return !actionsDisabled && rsv.canRedoCellEdit();
+            case PROP_CAN_PERSIST_DATA: {
+                if (rsv.getModel().isUpdateInProgress()) {
+                    return false;
+                }
+                DBCExecutionContext executionContext = rsv.getExecutionContext();
+                if (executionContext == null) {
+                    return false;
+                }
+                return rsv.getModel().getReadOnlyStatus(
+                    executionContext.getDataSource().getContainer()) == null;
+            }
         }
         return false;
     }

@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +21,7 @@ import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.ToolBar;
@@ -32,6 +30,7 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
 import org.jkiss.dbeaver.model.connection.DBPDriver;
 import org.jkiss.dbeaver.model.connection.DBPDriverSubstitutionDescriptor;
@@ -43,6 +42,7 @@ import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.dialogs.EnterNameDialog;
 import org.jkiss.dbeaver.ui.internal.UIConnectionMessages;
+import org.jkiss.dbeaver.ui.internal.UIMessages;
 import org.jkiss.dbeaver.ui.properties.PropertyTreeViewer;
 import org.jkiss.utils.CommonUtils;
 
@@ -71,6 +71,7 @@ public class ConnectionPropertiesControl extends PropertyTreeViewer {
     PropertySourceCustom makeProperties(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBPDriver driver,
+        @NotNull DBPDataSourceContainer dataSourceContainer,
         @NotNull DBPConnectionConfiguration connectionInfo,
         @Nullable DBPDriverSubstitutionDescriptor driverSubstitution
     ) {
@@ -82,7 +83,7 @@ public class ConnectionPropertiesControl extends PropertyTreeViewer {
 
         if (driverSubstitution == null) {
             // for now, we do not support reading driver properties from substitution drivers
-            loadDriverProperties(monitor, driver, connectionInfo);
+            loadDriverProperties(monitor, driver, dataSourceContainer, connectionInfo);
         }
         loadCustomProperties(driver, connectionProps);
 
@@ -133,7 +134,12 @@ public class ConnectionPropertiesControl extends PropertyTreeViewer {
 
     @Override
     protected boolean isHidePropertyValue(DBPPropertyDescriptor property) {
-        return CommonUtils.toString(property.getId()).toLowerCase(Locale.ENGLISH).contains("password");
+        Class<?> dataType = property.getDataType();
+        if (dataType != null && !(String.class.isAssignableFrom(dataType))) {
+            return false;
+        }
+        String propName = CommonUtils.toString(property.getId()).toLowerCase(Locale.ENGLISH);
+        return propName.contains("password") || propName.contains("token");
     }
 
     private void createNewProperty(Object node, String category) {
@@ -157,11 +163,21 @@ public class ConnectionPropertiesControl extends PropertyTreeViewer {
         return propertyDescriptors;
     }
 
-    private void loadDriverProperties(DBRProgressMonitor monitor, DBPDriver driver, DBPConnectionConfiguration connectionInfo)
+    private void loadDriverProperties(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBPDriver driver,
+        @NotNull DBPDataSourceContainer dataSourceContainer,
+        @NotNull DBPConnectionConfiguration connectionInfo
+    )
     {
         try {
             final DBPPropertyDescriptor[] connectionsProps =
-                driver.getDataSourceProvider().getConnectionProperties(monitor, driver, connectionInfo);
+                driver.getDataSourceProvider().getConnectionProperties(
+                    monitor,
+                    driver,
+                    dataSourceContainer,
+                    connectionInfo
+                );
             driverProvidedProperties = new ArrayList<>();
             if (connectionsProps != null) {
                 Collections.addAll(driverProvidedProperties, connectionsProps);
@@ -210,27 +226,30 @@ public class ConnectionPropertiesControl extends PropertyTreeViewer {
         ToolItem addItem = new ToolItem(toolBar, SWT.NONE);
         addItem.setImage(DBeaverIcons.getImage(UIIcon.ROW_ADD));
         addItem.setToolTipText("Add user property");
-        addItem.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                createNewProperty(getCategoryNode(USER_PROPERTIES_CATEGORY), USER_PROPERTIES_CATEGORY);
-            }
-        });
+        addItem.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+            createNewProperty(getCategoryNode(USER_PROPERTIES_CATEGORY), USER_PROPERTIES_CATEGORY)));
 
         ToolItem removeItem = new ToolItem(toolBar, SWT.NONE);
         removeItem.setImage(DBeaverIcons.getImage(UIIcon.ROW_DELETE));
         removeItem.setToolTipText("Remove user property");
-        removeItem.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        removeItem.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 ISelection selection = getSelection();
                 if (selection instanceof IStructuredSelection && !selection.isEmpty()) {
                     removeProperty(((IStructuredSelection) selection).getFirstElement());
                 }
-            }
-        });
+            }));
         removeItem.setEnabled(false);
 
+        ToolItem resetItem = new ToolItem(toolBar, SWT.NONE);
+        resetItem.setImage(DBeaverIcons.getImage(UIIcon.ERASE));
+        resetItem.setToolTipText(
+            UIMessages.ui_properties_tree_viewer_action_reset_value + UIMessages.ui_properties_tree_viewer__to_default);
+        resetItem.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> resetSelectedPropertyToDefault()));
+        resetItem.setEnabled(false);
+
+
+        Runnable updateResetItem = () -> resetItem.setEnabled(
+            !USER_PROPERTIES_CATEGORY.equals(getSelectedCategory()) && canResetSelectedProperty());
         addSelectionChangedListener(event -> {
             addItem.setEnabled(getCategoryNode(USER_PROPERTIES_CATEGORY) != null);
             boolean hasDelete = false;
@@ -238,7 +257,10 @@ public class ConnectionPropertiesControl extends PropertyTreeViewer {
                 hasDelete = true;
             }
             removeItem.setEnabled(hasDelete);
+            updateResetItem.run();
         });
+        addPropertyChangeListener(event -> updateResetItem.run());
+        addEditorValueChangeListener(updateResetItem);
     }
 
 }

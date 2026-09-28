@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.jkiss.dbeaver.model.websocket.event.datasource;
 
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
-import org.jkiss.dbeaver.model.websocket.event.WSEventType;
+import org.jkiss.dbeaver.model.websocket.WSConstants;
 import org.jkiss.dbeaver.model.websocket.event.WSProjectResourceEvent;
 
 import java.util.List;
@@ -27,31 +27,33 @@ public class WSDatasourceFolderEvent extends WSProjectResourceEvent {
     private final List<String> nodePaths;
 
     private WSDatasourceFolderEvent(
-        WSEventType eventType,
+        @NotNull String eventId,
         String sessionId,
         String userId,
         String projectId,
         List<String> nodePaths
     ) {
-        super(eventType, sessionId, userId, projectId);
+        super(eventId, WSConstants.TOPIC_DATASOURCE_FOLDER, sessionId, userId, projectId);
         this.nodePaths = nodePaths;
     }
 
+    @NotNull
     public static WSDatasourceFolderEvent create(
         @Nullable String sessionId,
         @Nullable String userId,
         @NotNull String projectId,
-        @NotNull List<String> datasourceIds
+        @NotNull List<String> folderPaths
     ) {
         return new WSDatasourceFolderEvent(
-            WSEventType.DATASOURCE_FOLDER_CREATED,
+            "cb_datasource_folder_created",
             sessionId,
             userId,
             projectId,
-            datasourceIds
+            folderPaths
         );
     }
 
+    @NotNull
     public static WSDatasourceFolderEvent delete(
         @Nullable String sessionId,
         @Nullable String userId,
@@ -59,7 +61,7 @@ public class WSDatasourceFolderEvent extends WSProjectResourceEvent {
         @NotNull List<String> datasourceIds
     ) {
         return new WSDatasourceFolderEvent(
-            WSEventType.DATASOURCE_FOLDER_DELETED,
+            "cb_datasource_folder_deleted",
             sessionId,
             userId,
             projectId,
@@ -67,6 +69,7 @@ public class WSDatasourceFolderEvent extends WSProjectResourceEvent {
         );
     }
 
+    @NotNull
     public static WSDatasourceFolderEvent update(
         @Nullable String sessionId,
         @Nullable String userId,
@@ -74,7 +77,7 @@ public class WSDatasourceFolderEvent extends WSProjectResourceEvent {
         @NotNull List<String> datasourceIds
     ) {
         return new WSDatasourceFolderEvent(
-            WSEventType.DATASOURCE_FOLDER_UPDATED,
+            "cb_datasource_folder_updated",
             sessionId,
             userId,
             projectId,

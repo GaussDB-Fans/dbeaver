@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@ package org.jkiss.dbeaver.ext.postgresql.ui;
 
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.ext.postgresql.PostgreMessages;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreRole;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -46,29 +46,27 @@ public class PostgreCreateRoleDialog extends BaseDialog
         this.role = role;
     }
 
+    @NotNull
     @Override
-    protected Composite createDialogArea(Composite parent) {
+    protected Composite createDialogArea(@NotNull Composite parent) {
         final Composite composite = super.createDialogArea(parent);
 
-        final Composite groupGeneral = UIUtils.createControlGroup(composite, PostgreMessages.dialog_create_role_group_general, 2, GridData.FILL_HORIZONTAL, SWT.NONE);
+        final Composite groupGeneral = UIUtils.createTitledComposite(composite, PostgreMessages.dialog_create_role_group_general, 2, GridData.FILL_HORIZONTAL);
 
         final Text nameText = UIUtils.createLabelText(groupGeneral, PostgreMessages.dialog_create_role_label_role_name, ""); //$NON-NLS-2$
         nameText.addModifyListener(e -> {
             name = nameText.getText().trim();
-            getButton(IDialogConstants.OK_ID).setEnabled(!name.isEmpty());
+            enableButton(IDialogConstants.OK_ID, !name.isEmpty());
         });
 
         final Text passwordText = UIUtils.createLabelText(groupGeneral, PostgreMessages.dialog_create_role_label_user_password, "", SWT.BORDER | SWT.PASSWORD); //$NON-NLS-2$
         passwordText.addModifyListener(e -> password = passwordText.getText());
 
         Button isUserCheck = UIUtils.createCheckbox(groupGeneral, PostgreMessages.dialog_create_role_label_user_role, null, true, 2);
-        isUserCheck.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        isUserCheck.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 isUser = isUserCheck.getSelection();
                 passwordText.setEnabled(isUser);
-            }
-        });
+            }));
 
         return composite;
     }
@@ -86,9 +84,8 @@ public class PostgreCreateRoleDialog extends BaseDialog
     }
 
     @Override
-    protected void createButtonsForButtonBar(Composite parent)
-    {
+    protected void createButtonsForButtonBar(@NotNull Composite parent) {
         super.createButtonsForButtonBar(parent);
-        getButton(IDialogConstants.OK_ID).setEnabled(false);
+        enableButton(IDialogConstants.OK_ID, false);
     }
 }

@@ -1,36 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?eclipse version="3.2"?>
-<!--
- * DBeaver - Universal Database Manager
- * Copyright (C) 2013-2014 Denis Forveille (titou10.titou10@gmail.com)
- * Copyright (C) 2010-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
-  -->
-
 <plugin>
 
     <extension
         point="org.jkiss.dbeaver.dataSourceProvider">
+        <dataSourceType
+            id="db2"
+            label="IBM Db2"
+            description="IBM Db2 database"
+            dataSourceInformation="Enterprise relational database from IBM"
+            icon="icons/db2_icon.svg"
+            iconBig="icons/db2_icon_big.svg"
+            logoImage="icons/db2_logo.svg"/>
         <datasource
                 class="org.jkiss.dbeaver.ext.db2.DB2DataSourceProvider"
                 description="Db2 connector"
-                icon="icons/db2_icon.png"
+                icon="icons/db2_icon.svg"
                 id="db2"
+                dataSourceType="db2"
                 label="Db2"
                 dialect="db2_luw">
             <tree
-                  icon="icons/db2_icon.png"
+                  icon="icons/db2_icon.svg"
                   label="Db2 data source"
                   path="db2">
                 <folder type="org.jkiss.dbeaver.ext.db2.model.DB2Schema" label="%tree.schemas.node.name" icon="#folder_schema" description="Database schemas">
@@ -452,8 +443,6 @@
                     sampleURL="jdbc:db2://{host}[:{port}]/{database}"
                     supportedConfigurationTypes="MANUAL,URL"
                     useURL="false"
-                    icon="icons/db2_icon.png"
-                    iconBig="icons/db2_icon_big.png"
                     defaultPort="50000"
                     webURL="https://www-01.ibm.com/support/docview.wss?uid=swg21363866"
                     propertiesURL="https://www.ibm.com/docs/en/db2/latest?topic=pdsdjs-common-data-server-driver-jdbc-sqlj-properties-all-database-products"
@@ -511,7 +500,7 @@
        <provider
             class="org.jkiss.dbeaver.ext.db2.data.DB2ValueHandlerProvider"
             description="DB2 data types provider"
-            id="org.jkiss.dbeaver.ext.db2.data.DB2ValueHandlerProvider"
+            id="DB2ValueHandlerProvider"
             label="Db2 data types provider">
 
             <datasource id="db2"/>
@@ -527,28 +516,28 @@
     </extension>
 
     <extension point="org.jkiss.dbeaver.sqlDialect">
-        <dialect id="db2_luw" parent="basic" class="org.jkiss.dbeaver.ext.db2.DB2SQLDialect" label="Db2 for LUW" description="IBM Db2 LUW SQL dialect." icon="icons/db2_icon.png">
+        <dialect id="db2_luw" parent="basic" class="org.jkiss.dbeaver.ext.db2.DB2SQLDialect" label="Db2 for LUW" description="IBM Db2 LUW SQL dialect." icon="icons/db2_icon.svg">
         </dialect>
     </extension>
 
     <extension point="org.jkiss.dbeaver.task">
-        <category id="db2" name="DB2" description="DB2 database tasks" icon="icons/db2_icon.png"/>
-        <category id="db2Tool" parent="db2" name="Tools" description="DB2 database tools" icon="icons/db2_icon.png"/>
+        <category id="db2" name="DB2" description="DB2 database tasks" icon="icons/db2_icon.svg"/>
+        <category id="db2Tool" parent="db2" name="Tools" description="DB2 database tools" icon="icons/db2_icon.svg"/>
 
         <!-- SQL tools -->
-        <task id="db2ToolTableTruncate" name="%tasks.truncate.node.name" description="%tasks.truncate.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2ToolTableTruncate">
+        <task id="db2ToolTableTruncate" name="%tasks.truncate.node.name" description="%tasks.truncate.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2ToolTableTruncate">
             <datasource id="db2"/>
             <objectType name="org.jkiss.dbeaver.ext.db2.model.DB2TableBase"/>
         </task>
-        <task id="db2ToolTableReorgCheck" name="%tasks.reorgcheck.node.name" description="%tasks.reorgcheck.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2ReorgCheckTableTool">
+        <task id="db2ToolTableReorgCheck" name="%tasks.reorgcheck.node.name" description="%tasks.reorgcheck.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2ReorgCheckTableTool">
             <datasource id="db2"/>
             <objectType name="org.jkiss.dbeaver.ext.db2.model.DB2TableBase"/>
         </task>
-        <task id="db2ToolTableReorgIndex" name="%tasks.reorgindex.node.name" description="%tasks.reorgindex.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2ReorgIndexTool">
+        <task id="db2ToolTableReorgIndex" name="%tasks.reorgindex.node.name" description="%tasks.reorgindex.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2ReorgIndexTool">
             <datasource id="db2"/>
             <objectType name="org.jkiss.dbeaver.ext.db2.model.DB2TableBase"/>
         </task>
-        <task id="db2ToolTableRunstats" name="%tasks.runstats.node.name" description="%tasks.runstats.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2RunstatsTool">
+        <task id="db2ToolTableRunstats" name="%tasks.runstats.node.name" description="%tasks.runstats.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="db2Tool" handler="org.jkiss.dbeaver.ext.db2.tasks.DB2RunstatsTool">
             <datasource id="db2"/>
             <objectType name="org.jkiss.dbeaver.ext.db2.model.DB2TableBase"/>
         </task>

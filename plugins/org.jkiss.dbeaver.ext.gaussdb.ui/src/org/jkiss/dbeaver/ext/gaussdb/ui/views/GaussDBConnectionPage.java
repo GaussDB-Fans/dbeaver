@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,17 +18,17 @@
 package org.jkiss.dbeaver.ext.gaussdb.ui.views;
 
 import org.eclipse.jface.dialogs.IDialogPage;
+import org.eclipse.jface.fieldassist.ControlDecoration;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyListener;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.ext.postgresql.PostgreConstants;
 import org.jkiss.dbeaver.ext.postgresql.PostgreMessages;
 import org.jkiss.dbeaver.ext.postgresql.PostgreUtils;
@@ -38,7 +38,6 @@ import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
 import org.jkiss.dbeaver.model.connection.DBPDriver;
 import org.jkiss.dbeaver.model.connection.DBPDriverConfigurationType;
-import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.IDialogPageProvider;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.dialogs.connection.ConnectionPageWithAuth;
@@ -60,22 +59,10 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
     private boolean activated = false;
 
     @Override
-    public void dispose() {
-        super.dispose();
-    }
-
-    @Override
-    public Image getImage() {
-        final DBPDriver driver = site.getDriver();
-        PostgreServerType serverType = getServerType(driver);
-        return DBeaverIcons.getImage(serverType.getIcon());
-    }
-
-    @Override
-    public void createControl(Composite composite) {
+    public void createControl(@NotNull Composite composite) {
         final ModifyListener textListener = e -> {
             if (activated) {
-                updateUrl();
+                super.updateUrl(urlText);
                 site.updateButtons();
             }
         };
@@ -85,17 +72,17 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
         GridData gd = new GridData(GridData.FILL_BOTH);
         mainGroup.setLayoutData(gd);
 
-        Group addrGroup = UIUtils.createControlGroup(mainGroup, UIConnectionMessages.dialog_connection_server_label, 4,
-            GridData.FILL_HORIZONTAL, 0);
+        Composite addrGroup = UIUtils.createTitledComposite(
+            mainGroup,
+            UIConnectionMessages.dialog_connection_server_label,
+            4,
+            GridData.FILL_HORIZONTAL
+        );
 
-        SelectionAdapter typeSwitcher = new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                setupConnectionModeSelection(urlText, typeURLRadio.getSelection(), GROUP_CONNECTION_ARR);
-                updateUrl();
-            }
-        };
-        createConnectionModeSwitcher(addrGroup, typeSwitcher);
+        createConnectionModeSwitcher(addrGroup, SelectionListener.widgetSelectedAdapter(e -> {
+            super.setupConnectionModeSelection(urlText, typeURLRadio.getSelection(), GROUP_CONNECTION_ARR);
+            super.updateUrl(urlText);
+        }));
 
         UIUtils.createControlLabel(addrGroup, UIConnectionMessages.dialog_connection_url_label);
         urlText = new Text(addrGroup, SWT.BORDER);
@@ -105,6 +92,7 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
         gd.widthHint = 355;
         urlText.setLayoutData(gd);
         urlText.addModifyListener(e -> site.updateButtons());
+        urlText.setData(URL_TEXT_DATA_ERROR_DECORATOR_KEY, new ControlDecoration(urlText, SWT.BOTTOM | SWT.LEFT));
 
         final DBPDriver driver = site.getDriver();
         PostgreServerType serverType = getServerType(driver);
@@ -117,6 +105,7 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
         gd = new GridData(GridData.FILL_HORIZONTAL);
         gd.grabExcessHorizontalSpace = true;
         hostText.setLayoutData(gd);
+        UIUtils.setDefaultTextControlWidthHint(hostText);
         hostText.addModifyListener(textListener);
         addControlToGroup(GROUP_CONNECTION, hostText);
 
@@ -141,6 +130,7 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
         gd.grabExcessHorizontalSpace = true;
         gd.horizontalSpan = 3;
         dbText.setLayoutData(gd);
+        UIUtils.setDefaultTextControlWidthHint(dbText);
         dbText.addModifyListener(textListener);
         dbText.setMessage(PostgreMessages.dialog_database_name_hint);
         addControlToGroup(GROUP_CONNECTION, dbText);
@@ -213,13 +203,13 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
             urlText.setText(connectionInfo.getUrl());
         }
         setupConnectionModeSelection(urlText, useURL, GROUP_CONNECTION_ARR);
-        updateUrl();
+        super.updateUrl(urlText);
 
-        activated = false;
+        activated = true;
     }
 
     @Override
-    public void saveSettings(DBPDataSourceContainer dataSource) {
+    public void saveSettings(@NotNull DBPDataSourceContainer dataSource) {
         DBPConnectionConfiguration connectionInfo = dataSource.getConnectionConfiguration();
 
         if (hostText != null) {
@@ -235,15 +225,10 @@ public class GaussDBConnectionPage extends ConnectionPageWithAuth implements IDi
         super.saveSettings(dataSource);
     }
 
+    @Nullable
     @Override
     public IDialogPage[] getDialogPages(boolean extrasOnly, boolean forceCreate) {
         return new IDialogPage[]
-        { new PostgreConnectionPageAdvanced(), new DriverPropertiesDialogPage(this) };
-    }
-
-    private void updateUrl() {
-        DBPDataSourceContainer dataSourceContainer = site.getActiveDataSource();
-        saveSettings(dataSourceContainer);
-        urlText.setText(dataSourceContainer.getDriver().getConnectionURL(site.getActiveDataSource().getConnectionConfiguration()));
+        { new PostgreConnectionPageAdvanced(null), new DriverPropertiesDialogPage(this) };
     }
 }

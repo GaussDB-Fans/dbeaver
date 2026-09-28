@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.task.DBTTask;
 
+import java.io.OutputStream;
 import java.util.Date;
 import java.util.Map;
 
@@ -40,13 +41,19 @@ public interface IDataTransferConsumer<SETTINGS extends IDataTransferSettings, P
         public boolean isBinary;
         public boolean isHTML;
         public Date startTimestamp;
+        public OutputStream exportToStream;
 
         public TransferParameters() {
         }
 
         public TransferParameters(boolean isBinary, boolean isHTML) {
+            this(isBinary, isHTML, null);
+        }
+
+        public TransferParameters(boolean isBinary, boolean isHTML, OutputStream exportToStream) {
             this.isBinary = isBinary;
             this.isHTML = isHTML;
+            this.exportToStream = exportToStream;
         }
     }
 
@@ -65,17 +72,8 @@ public interface IDataTransferConsumer<SETTINGS extends IDataTransferSettings, P
      * @param monitor monitor
      * @param last called in the very end of all transfers
      */
-    void finishTransfer(DBRProgressMonitor monitor, boolean last);
-
-    /**
-     * Finishes this transfer
-     *
-     * @param monitor   monitor
-     * @param exception an exception caught during transfer, or {@code null} if transfer was successful
-     * @param last      called in the very end of all transfers
-     */
-    default void finishTransfer(@NotNull DBRProgressMonitor monitor, @Nullable Exception exception, boolean last) {
-        finishTransfer(monitor, exception, null, last);
+    default void finishTransfer(@NotNull DBRProgressMonitor monitor, boolean last) throws DBException {
+        finishTransfer(monitor, null, null, last);
     }
 
     /**
@@ -86,9 +84,12 @@ public interface IDataTransferConsumer<SETTINGS extends IDataTransferSettings, P
      * @param task    a task the transfer was started from
      * @param last    called in the very end of all transfers
      */
-    default void finishTransfer(@NotNull DBRProgressMonitor monitor, @Nullable Throwable error, @Nullable DBTTask task, boolean last) {
-        finishTransfer(monitor, last);
-    }
+    void finishTransfer(
+        @NotNull DBRProgressMonitor monitor,
+        @Nullable Throwable error,
+        @Nullable DBTTask task,
+        boolean last
+    ) throws DBException;
 
     // Target object. May be null or target database object (table)
     @Nullable

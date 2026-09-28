@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.jkiss.dbeaver.model.impl.jdbc.data;
 
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.data.DBDContentStorage;
 import org.jkiss.dbeaver.model.data.DBDDisplayFormat;
@@ -25,6 +26,7 @@ import org.jkiss.dbeaver.model.exec.DBCException;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCPreparedStatement;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCSession;
+import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSTypedObject;
 import org.jkiss.dbeaver.utils.ContentUtils;
@@ -33,7 +35,6 @@ import org.jkiss.dbeaver.utils.MimeTypes;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 
 /**
@@ -115,50 +116,57 @@ public class JDBCContentXML extends JDBCContentLOB {
             } else if (storage != null) {
                 try {
                     preparedStatement.setSQLXML(paramIndex, new JDBCSQLXMLImpl(storage));
-                }
-                catch (Throwable e) {
-                    if (e instanceof SQLException && !(e instanceof SQLFeatureNotSupportedException)) {
+                } catch (Throwable e) {
+                    if (e instanceof SQLException && !JDBCUtils.isFeatureNotSupportedError(session.getDataSource(), e)) {
                         throw (SQLException) e;
                     }
-                    // Try 3 jdbc methods to set character stream
-                    Reader streamReader = storage.getContentReader();
                     try {
-                        preparedStatement.setCharacterStream(
-                            paramIndex,
-                            streamReader);
+                        SQLXML sqlxml = preparedStatement.getConnection().createSQLXML();
+                        sqlxml.setString(new JDBCSQLXMLImpl(storage).getString());
+                        preparedStatement.setSQLXML(paramIndex, sqlxml);
                     } catch (Throwable e0) {
-                        if (e0 instanceof SQLException && !(e0 instanceof SQLFeatureNotSupportedException)) {
+                        if (e0 instanceof SQLException && !JDBCUtils.isFeatureNotSupportedError(session.getDataSource(), e0)) {
                             throw (SQLException) e0;
                         }
-                        long streamLength = ContentUtils.calculateContentLength(storage.getContentReader());
+                        // Try 3 jdbc methods to set character stream
+                        Reader streamReader = storage.getContentReader();
                         try {
                             preparedStatement.setCharacterStream(
                                 paramIndex,
-                                streamReader,
-                                streamLength);
+                                streamReader);
                         } catch (Throwable e1) {
-                            if (e1 instanceof SQLException && !(e instanceof SQLFeatureNotSupportedException)) {
+                            if (e1 instanceof SQLException && !JDBCUtils.isFeatureNotSupportedError(session.getDataSource(), e1)) {
                                 throw (SQLException) e1;
                             }
-                            preparedStatement.setCharacterStream(
-                                paramIndex,
-                                streamReader,
-                                (int) streamLength);
+                            long streamLength = ContentUtils.calculateContentLength(storage.getContentReader());
+                            try {
+                                preparedStatement.setCharacterStream(
+                                    paramIndex,
+                                    streamReader,
+                                    streamLength);
+                            } catch (Throwable e2) {
+                                if (e2 instanceof SQLException && !JDBCUtils.isFeatureNotSupportedError(session.getDataSource(), e2)) {
+                                    throw (SQLException) e2;
+                                }
+                                preparedStatement.setCharacterStream(
+                                    paramIndex,
+                                    streamReader,
+                                    (int) streamLength);
+                            }
                         }
                     }
                 }
             } else {
                 preparedStatement.setNull(paramIndex, java.sql.Types.SQLXML);
             }
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             throw new DBCException(e, session.getExecutionContext());
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             throw new DBCException("IO error while reading content", e, session.getExecutionContext());
         }
     }
 
+    @Nullable
     @Override
     public SQLXML getRawValue() {
         return xml;
@@ -176,6 +184,7 @@ public class JDBCContentXML extends JDBCContentLOB {
         return new JDBCContentXML(executionContext, null);
     }
 
+    @Nullable
     @Override
     public String getDisplayString(@NotNull DBDDisplayFormat format)
     {

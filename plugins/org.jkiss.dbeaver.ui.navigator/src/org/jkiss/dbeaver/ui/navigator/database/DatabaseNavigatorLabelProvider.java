@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +23,12 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.Tree;
 import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.themes.ITheme;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
@@ -37,8 +39,7 @@ import org.jkiss.dbeaver.model.navigator.DBNResource;
 import org.jkiss.dbeaver.model.navigator.DBNUtils;
 import org.jkiss.dbeaver.model.struct.DBSWrapper;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
-import org.jkiss.dbeaver.ui.DBeaverIcons;
-import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.*;
 import org.jkiss.dbeaver.ui.internal.UINavigatorMessages;
 import org.jkiss.dbeaver.ui.navigator.NavigatorPreferences;
 import org.jkiss.dbeaver.ui.navigator.database.load.TreeNodeSpecial;
@@ -50,42 +51,53 @@ import java.util.StringJoiner;
 /**
  * DatabaseNavigatorLabelProvider
 */
-public class DatabaseNavigatorLabelProvider extends ColumnLabelProvider implements IFontProvider, IColorProvider
-{
-    public static final String TREE_TABLE_FONT = "org.eclipse.ui.workbench.TREE_TABLE_FONT";
-    private static final String COLOR_NODE_TRANSIENT_FOREGROUND = "org.jkiss.dbeaver.ui.navigator.node.transient.foreground";
+public class DatabaseNavigatorLabelProvider extends ColumnLabelProvider implements IFontProvider, IColorProvider {
 
+
+    @NotNull
+    private final DatabaseNavigatorTree tree;
     private final IPropertyChangeListener themeChangeListener;
-
-    protected Font normalFont;
-    protected Font boldFont;
-    protected Font italicFont;
-    //private Font boldItalicFont;
+    private boolean themeRefreshPending;
     protected Color lockedForeground;
-    protected Color transientForeground;
     private ILabelDecorator labelDecorator;
 
     public DatabaseNavigatorLabelProvider(@NotNull DatabaseNavigatorTree tree) {
+        this.tree = tree;
         this.lockedForeground = Display.getDefault().getSystemColor(SWT.COLOR_DARK_GRAY);
-        this.themeChangeListener = e -> {
-            final ITheme theme = PlatformUI.getWorkbench().getThemeManager().getCurrentTheme();
-            normalFont = theme.getFontRegistry().get(TREE_TABLE_FONT);
-            boldFont = theme.getFontRegistry().getBold(TREE_TABLE_FONT);
-            italicFont = theme.getFontRegistry().getItalic(TREE_TABLE_FONT);
-            transientForeground = theme.getColorRegistry().get(COLOR_NODE_TRANSIENT_FOREGROUND);
 
-            final TreeViewer viewer = tree.getViewer();
-            viewer.getControl().setFont(normalFont);
-            viewer.refresh();
+        BaseThemeSettings.instance.addPropertyListener(
+            UIFonts.Eclipse.TREE_AND_TABLE_FONT_FOR_VIEWS,
+            s -> setNavigatorFont(tree),
+            tree);
 
-            final Text filter = tree.getFilterControl();
-            if (filter != null) {
-                filter.setFont(normalFont);
+        themeChangeListener = event -> {
+            if (!themeRefreshPending) {
+                themeRefreshPending = true;
+                UIUtils.asyncExec(() -> {
+                    themeRefreshPending = false;
+                    if (!tree.isDisposed()) {
+                        NativeThemeUtils.updateNativeTheme(tree.getViewer().getControl());
+                        tree.getViewer().refresh();
+                    }
+                });
             }
         };
-        this.themeChangeListener.propertyChange(null);
-
         PlatformUI.getWorkbench().getThemeManager().addPropertyChangeListener(themeChangeListener);
+
+        setNavigatorFont(tree);
+    }
+
+    private static void setNavigatorFont(@NotNull DatabaseNavigatorTree tree) {
+        Font normalFont = BaseThemeSettings.instance.treeAndTableFont;
+
+        final TreeViewer viewer = tree.getViewer();
+        viewer.getControl().setFont(normalFont);
+        viewer.refresh();
+
+        final Text filter = tree.getFilterControl();
+        if (filter != null) {
+            filter.setFont(normalFont);
+        }
     }
 
     @Override
@@ -145,15 +157,15 @@ public class DatabaseNavigatorLabelProvider extends ColumnLabelProvider implemen
     @Override
     public Font getFont(Object element) {
         if (DBNUtils.isDefaultElement(element)) {
-            return boldFont;
+            return BaseThemeSettings.instance.treeAndTableFontBold;
         } else {
             if (element instanceof DBNDataSource dbnDataSource) {
                 final DBPDataSourceContainer ds = dbnDataSource.getDataSourceContainer();
                 if (ds != null && (ds.isProvided() || ds.isTemporary())) {
-                    return italicFont;
+                    return BaseThemeSettings.instance.treeAndTableFontItalic;
                 }
             }
-            return normalFont;
+            return BaseThemeSettings.instance.treeAndTableFont;
         }
     }
 
@@ -163,13 +175,13 @@ public class DatabaseNavigatorLabelProvider extends ColumnLabelProvider implemen
             if (dbnNode instanceof DBNDataSource dbnDataSource) {
                 DBPDataSourceContainer ds = dbnDataSource.getDataSourceContainer();
                 Color bgColor = UIUtils.getConnectionColor(ds.getConnectionConfiguration());
-                return bgColor == null ? null : UIUtils.getContrastColor(bgColor);
+                return bgColor == null ? null : UIStyles.getContrastColor(bgColor);
             }
             if (dbnNode.isLocked()) {
                 return lockedForeground;
             }
             if (dbnNode instanceof DBSWrapper dbsWrapper && dbsWrapper.getObject() != null && !dbsWrapper.getObject().isPersisted()) {
-                return transientForeground;
+                return NavigatorThemeSettings.instance.transientForeground;
             }
         }
         if (element instanceof TreeNodeSpecial) {
@@ -199,6 +211,20 @@ public class DatabaseNavigatorLabelProvider extends ColumnLabelProvider implemen
             return null;
         }
         if (element instanceof DBNDataSource dbnDataSource) {
+            {
+                Tree treeControl = tree.getViewer().getTree();
+                Point cursorLocation = Display.getCurrent().getCursorLocation();
+                Point treeLocation = treeControl.toControl(cursorLocation);
+                    //treeControl.getShell().toDisplay(cursorLocation.x, cursorLocation.y);
+                Event event = new Event();
+                event.x = treeLocation.x;
+                event.y = treeLocation.y;
+                String tipText = tree.getItemRenderer().getToolTipText(dbnDataSource, treeControl, event);
+                if (tipText != null) {
+                    return tipText;
+                }
+            }
+
             final DBPDataSourceContainer ds = dbnDataSource.getDataSourceContainer();
             if (ds != null) {
                 StringJoiner tooltip = new StringJoiner("\n");
@@ -241,17 +267,17 @@ public class DatabaseNavigatorLabelProvider extends ColumnLabelProvider implemen
                 return tooltip.toString();
 
             }
-        } else if (element instanceof DBNNode) {
+        } else if (element instanceof DBNNode node) {
             if (element instanceof DBNResource &&
                 !DBWorkbench.getPlatform().getPreferenceStore().getBoolean(NavigatorPreferences.NAVIGATOR_SHOW_CONTENTS_IN_TOOLTIP)
             ) {
                 return null;
             }
-            final String description = ((DBNNode) element).getNodeDescription();
+            final String description = node.getNodeDescription();
             if (!CommonUtils.isEmptyTrimmed(description)) {
                 return description;
             }
-            return ((DBNNode) element).getNodeDisplayName();
+            return node.getNodeDisplayName();
         } else if (element instanceof IToolTipProvider provider) {
             return provider.getToolTipText(element);
         }

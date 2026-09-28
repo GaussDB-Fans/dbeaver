@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,16 +20,14 @@ import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
 import org.jkiss.dbeaver.model.struct.DBSTypedObject;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 
-@RunWith(MockitoJUnitRunner.class)
-public class OracleDialectFunctionsTest {
+public class OracleDialectFunctionsTest extends DBeaverUnitTest {
     @Mock
     DBPDataSourceContainer mockDataSourceContainer;
     @Mock
@@ -39,7 +37,7 @@ public class OracleDialectFunctionsTest {
     private OracleSQLDialect dialect;
     private OracleDataSource dataSource;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         dialect = new OracleSQLDialect();
         Mockito.when(mockDataSourceContainer.getConnectionConfiguration()).thenReturn(mockConnectionConfiguration);
@@ -53,7 +51,7 @@ public class OracleDialectFunctionsTest {
     public void generateCorrectDataTypeNameWithModifiersFromJSONDataType() {
         Mockito.when(mockTypedObject.getTypeName()).thenReturn("json");
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, dataSource);
-        Assert.assertEquals("JSON", actualDataType);
+        Assertions.assertEquals("JSON", actualDataType);
     }
 
     @Test
@@ -62,7 +60,7 @@ public class OracleDialectFunctionsTest {
         Mockito.when(mockTypedObject.getPrecision()).thenReturn(null);
 //        Mockito.when(mockTypedObject.getScale()).thenReturn(null);
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, dataSource);
-        Assert.assertEquals("NUMBER", actualDataType);
+        Assertions.assertEquals("NUMBER", actualDataType);
     }
 
     @Test
@@ -71,7 +69,7 @@ public class OracleDialectFunctionsTest {
         Mockito.when(mockTypedObject.getPrecision()).thenReturn(33);
         Mockito.when(mockTypedObject.getScale()).thenReturn(null);
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, dataSource);
-        Assert.assertEquals("NUMBER(33)", actualDataType);
+        Assertions.assertEquals("NUMBER(33)", actualDataType);
     }
 
     @Test
@@ -80,6 +78,12 @@ public class OracleDialectFunctionsTest {
         Mockito.when(mockTypedObject.getPrecision()).thenReturn(22);
         Mockito.when(mockTypedObject.getScale()).thenReturn(11);
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, dataSource);
-        Assert.assertEquals("NUMBER(22,11)", actualDataType);
+        Assertions.assertEquals("NUMBER(22,11)", actualDataType);
+    }
+
+    @Test
+    public void doesNotRegisterGlobalVariablesAsKeywordsWithoutDriverInitialization() {
+        Assertions.assertNull(dialect.getKeywordType("SYSDATE"));
+        Assertions.assertNull(dialect.getKeywordType("SYSTIMESTAMP"));
     }
 }

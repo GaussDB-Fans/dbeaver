@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,23 +20,25 @@ import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.DBIcon;
 import org.jkiss.dbeaver.model.DBValueFormatting;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.virtual.DBVEntity;
 import org.jkiss.dbeaver.model.virtual.DBVEntityAttribute;
+import org.jkiss.dbeaver.ui.ConComposite;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.IHelpContextIdProvider;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetViewer;
 import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
+import org.jkiss.dbeaver.ui.css.CSSUtils;
 import org.jkiss.dbeaver.ui.editors.object.struct.BaseObjectEditPage;
 import org.jkiss.utils.CommonUtils;
 
@@ -65,9 +67,11 @@ public class EditVirtualColumnsPage extends BaseObjectEditPage implements IHelpC
         return vEntity;
     }
 
+    @NotNull
     @Override
-    protected Composite createPageContents(Composite parent) {
-        Composite panel = UIUtils.createComposite(parent, 1);
+    protected Composite createPageContents(@NotNull Composite parent) {
+        ConComposite panel = new ConComposite(parent);
+        panel.setGridLayout(1);
         panel.setLayoutData(new GridData(GridData.FILL_BOTH));
 
         attrTable = new Table(panel, SWT.FULL_SELECTION | SWT.BORDER);
@@ -82,10 +86,9 @@ public class EditVirtualColumnsPage extends BaseObjectEditPage implements IHelpC
         {
             Composite buttonsPanel = UIUtils.createComposite(panel, 3);
             buttonsPanel.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_BEGINNING));
+            CSSUtils.markConnectionTypeColor(buttonsPanel);
 
-            Button btnAdd = UIUtils.createDialogButton(buttonsPanel, ResultSetMessages.virtual_edit_columns_page_dialog_button_add, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            Button btnAdd = UIUtils.createDialogButton(buttonsPanel, ResultSetMessages.virtual_edit_columns_page_dialog_button_add, SelectionListener.widgetSelectedAdapter(e -> {
                     DBVEntityAttribute vAttr = new DBVEntityAttribute(vEntity, null, "vcolumn");
                     EditVirtualAttributePage editAttrPage = new EditVirtualAttributePage(viewer, vAttr);
                     if (editAttrPage.edit(parent.getShell())) {
@@ -94,19 +97,12 @@ public class EditVirtualColumnsPage extends BaseObjectEditPage implements IHelpC
                         structChanged = true;
                         createAttributeItem(attrTable, vAttr);
                     }
-                }
-            });
-            Button btnEdit = UIUtils.createDialogButton(buttonsPanel, ResultSetMessages.virtual_edit_columns_page_dialog_button_edit, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    editSelectedAttribute(attrTable);
-                }
-            });
+                }));
+            Button btnEdit = UIUtils.createDialogButton(buttonsPanel, ResultSetMessages.virtual_edit_columns_page_dialog_button_edit, SelectionListener.widgetSelectedAdapter(e ->
+                editSelectedAttribute(attrTable)));
             btnEdit.setEnabled(false);
 
-            Button btnRemove = UIUtils.createDialogButton(buttonsPanel, ResultSetMessages.virtual_edit_columns_page_dialog_button_remove, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            Button btnRemove = UIUtils.createDialogButton(buttonsPanel, ResultSetMessages.virtual_edit_columns_page_dialog_button_remove, SelectionListener.widgetSelectedAdapter(e -> {
                     DBVEntityAttribute virtualAttr = (DBVEntityAttribute) attrTable.getSelection()[0].getData();
                     if (!UIUtils.confirmAction(parent.getShell(),
                     	ResultSetMessages.virtual_edit_columns_page_confirm_action_delete,
@@ -116,18 +112,14 @@ public class EditVirtualColumnsPage extends BaseObjectEditPage implements IHelpC
                     vEntity.removeVirtualAttribute(virtualAttr);
                     attrTable.remove(attrTable.getSelectionIndices());
                     structChanged = true;
-                }
-            });
+                }));
             btnRemove.setEnabled(false);
 
-            attrTable.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            attrTable.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     boolean attrSelected = attrTable.getSelectionIndex() >= 0;
                     btnEdit.setEnabled(attrSelected);
                     btnRemove.setEnabled(attrSelected);
-                }
-            });
+                }));
             attrTable.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseDoubleClick(MouseEvent e) {

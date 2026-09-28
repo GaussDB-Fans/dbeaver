@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import org.jkiss.dbeaver.model.access.DBACredentialsProvider;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
 import org.jkiss.dbeaver.model.connection.DBPDriver;
 import org.jkiss.dbeaver.model.net.DBWNetworkProfile;
+import org.jkiss.dbeaver.model.net.DBWNetworkProfileManager;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
 import org.jkiss.dbeaver.model.secret.DBPSecretHolder;
 import org.jkiss.dbeaver.model.struct.DBSObjectFilter;
@@ -74,10 +75,27 @@ public interface DBPDataSourceRegistry extends DBPObject, DBPSecretHolder {
     List<? extends DBPDataSourceContainer> getDataSources();
 
     @NotNull
-    DBPDataSourceContainer createDataSource(@NotNull DBPDriver driver, @NotNull DBPConnectionConfiguration connConfig);
+    <T extends DBPDataSourceContainer> T createDataSource(
+        @NotNull DBPDriver driver,
+        @NotNull DBPConnectionConfiguration connConfig
+    );
+
+    <T extends DBPDataSourceContainer> T createDataSource(
+        @NotNull String id,
+        @NotNull DBPDriver driver,
+        @NotNull DBPConnectionConfiguration connConfig
+    );
+
+    <T extends DBPDataSourceContainer> T createDataSource(
+        @NotNull DBPDataSourceConfigurationStorage dataSourceStorage,
+        @NotNull DBPDataSourceOrigin origin,
+        @NotNull String id,
+        @NotNull DBPDriver driver,
+        @NotNull DBPConnectionConfiguration configuration
+    );
 
     @NotNull
-    DBPDataSourceContainer createDataSource(@NotNull DBPDataSourceContainer source);
+    <T extends DBPDataSourceContainer> T createDataSource(@NotNull DBPDataSourceContainer source);
 
     void addDataSourceListener(@NotNull DBPEventListener listener);
 
@@ -89,13 +107,23 @@ public interface DBPDataSourceRegistry extends DBPObject, DBPSecretHolder {
 
     void updateDataSource(@NotNull DBPDataSourceContainer dataSource) throws DBException;
 
+    default void updateDataSources(@NotNull List<? extends DBPDataSourceContainer> dataSources) throws DBException {
+        for (DBPDataSourceContainer dataSource : dataSources) {
+            updateDataSource(dataSource);
+        }
+    }
+
+    default void updateDataSource(@NotNull DBPDataSourceContainer dataSource, boolean forcePersistSecrets) throws DBException {
+        updateDataSource(dataSource);
+    }
+
     @NotNull
     List<? extends DBPDataSourceFolder> getAllFolders();
 
     @NotNull
     List<? extends DBPDataSourceFolder> getRootFolders();
 
-    @Nullable
+    @NotNull
     DBPDataSourceFolder getFolder(@NotNull String path);
 
     @NotNull
@@ -106,7 +134,7 @@ public interface DBPDataSourceRegistry extends DBPObject, DBPSecretHolder {
     /**
      * Moves connection folder
      */
-    void moveFolder(@NotNull String oldPath, @NotNull String newPath);
+    void moveFolder(@NotNull String oldPath, @NotNull String newPath) throws DBException;
 
     @Nullable
     DBSObjectFilter getSavedFilter(String name);
@@ -116,16 +144,10 @@ public interface DBPDataSourceRegistry extends DBPObject, DBPSecretHolder {
     void removeSavedFilter(@NotNull String filterName);
 
     // Network profiles
-
-    @Nullable
-    DBWNetworkProfile getNetworkProfile(@Nullable String source, @NotNull String name);
     @NotNull
-    List<DBWNetworkProfile> getNetworkProfiles();
-    void updateNetworkProfile(@NotNull DBWNetworkProfile profile);
-    void removeNetworkProfile(@NotNull DBWNetworkProfile profile);
+    DBWNetworkProfileManager getNetworkProfiles();
 
     // Auth profiles
-
     @Nullable
     DBAAuthProfile getAuthProfile(@NotNull String id);
     @NotNull
@@ -184,6 +206,9 @@ public interface DBPDataSourceRegistry extends DBPObject, DBPSecretHolder {
     @NotNull
     DBPPreferenceStore getPreferenceStore();
 
-    void dispose();
+    // Can be called only once
+    // FIXME: move it in another abstraction
+    void initializeDataSources();
 
+    void dispose();
 }

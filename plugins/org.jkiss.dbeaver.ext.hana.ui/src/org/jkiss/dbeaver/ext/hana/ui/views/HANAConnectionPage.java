@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ package org.jkiss.dbeaver.ext.hana.ui.views;
 
 import org.eclipse.jface.dialogs.IDialogPage;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.ext.hana.model.HANAConstants;
 import org.jkiss.dbeaver.ext.hana.ui.internal.HANAEdition;
 import org.jkiss.dbeaver.ext.hana.ui.internal.HANAMessages;
@@ -70,31 +70,13 @@ public class HANAConnectionPage extends ConnectionPageWithAuth implements IDialo
     private String instanceValue;
     private String databaseValue;
 
-    private final Image logoImage;
-
-    public HANAConnectionPage() {
-        logoImage = createImage("icons/sap_hana_logo.png"); //$NON-NLS-1$
-    }
-
     @Override
-    public void dispose() {
-        super.dispose();
-        UIUtils.dispose(logoImage);
-    }
-
-    @Override
-    public Image getImage() {
-        return logoImage;
-    }
-
-    @Override
-    public void createControl(Composite composite) {
+    public void createControl(@NotNull Composite composite) {
         Composite settingsGroup = new Composite(composite, SWT.NONE);
         settingsGroup.setLayout(new GridLayout(1, false));
         settingsGroup.setLayoutData(new GridData(GridData.FILL_BOTH));
 
-        Composite addrGroup = UIUtils.createControlGroup(settingsGroup, HANAMessages.label_connection, 2, 0, 0);
-        addrGroup.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+        Composite addrGroup = UIUtils.createTitledComposite(settingsGroup, HANAMessages.label_connection, 2, GridData.FILL_HORIZONTAL);
 
         UIUtils.createControlLabel(addrGroup, HANAMessages.label_edition);
         editionCombo = new Combo(addrGroup, SWT.DROP_DOWN | SWT.READ_ONLY);
@@ -118,9 +100,7 @@ public class HANAConnectionPage extends ConnectionPageWithAuth implements IDialo
         databaseText = new Text(addrGroup, SWT.BORDER);
         databaseText.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 
-        editionCombo.addSelectionListener(new SelectionAdapter() {
-            @Override public void widgetSelected(SelectionEvent e) { editionUpdated(); site.updateButtons(); }
-        });
+        editionCombo.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> { editionUpdated(); site.updateButtons(); }));
         hostText.addModifyListener(e -> { hostUpdated(); site.updateButtons(); });
         portText.addModifyListener(e -> site.updateButtons());
         instanceText.addModifyListener(e -> { instanceUpdated(); site.updateButtons(); });
@@ -197,7 +177,7 @@ public class HANAConnectionPage extends ConnectionPageWithAuth implements IDialo
     }
 
     @Override
-    public void saveSettings(DBPDataSourceContainer dataSource) {
+    public void saveSettings(@NotNull DBPDataSourceContainer dataSource) {
         DBPConnectionConfiguration connectionInfo = dataSource.getConnectionConfiguration();
         connectionInfo.setProviderProperty(PROV_PROP_EDITION, edition.name());
         if (created) {
@@ -221,6 +201,7 @@ public class HANAConnectionPage extends ConnectionPageWithAuth implements IDialo
         super.saveSettings(dataSource);
     }
 
+    @Nullable
     @Override
     public IDialogPage[] getDialogPages(boolean extrasOnly, boolean forceCreate) {
         return new IDialogPage[] { new DriverPropertiesDialogPage(this) };

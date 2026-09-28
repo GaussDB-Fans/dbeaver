@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,7 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IContributionManager;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Event;
@@ -39,7 +38,6 @@ import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.ActionUtils;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
-import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.controls.CustomTimeEditor;
 import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
 import org.jkiss.dbeaver.ui.data.IValueController;
@@ -69,7 +67,7 @@ public class DateTimeInlineEditor extends BaseValueEditor<Control> {
             this.valueController = valueController;
             this.parent = parent;
             super.setText("Text");
-            super.setImageDescriptor(DBeaverIcons.getImageDescriptor(UIIcon.SQL_TEXT));
+            super.setImageDescriptor(DBeaverIcons.getImageDescriptor(DBIcon.SQL_TEXT));
         }
 
         @Override
@@ -128,7 +126,7 @@ public class DateTimeInlineEditor extends BaseValueEditor<Control> {
                 DBWorkbench.getPlatformUI()
                     .showWarningMessageBox(
                         ResultSetMessages.dialog_value_view_error_parsing_date_title,
-                        ResultSetMessages.dialog_value_view_error_parsing_date_message
+                        NLS.bind(ResultSetMessages.dialog_value_view_error_parsing_date_message, exception.getMessage())
                     );
                 DBWorkbench.getPlatform().getPreferenceStore().setValue(ModelPreferences.RESULT_SET_USE_DATETIME_EDITOR, false);
                 this.setChecked(false);
@@ -147,14 +145,11 @@ public class DateTimeInlineEditor extends BaseValueEditor<Control> {
     @Override
     protected void addInlineListeners(@NotNull Control inlineControl, @NotNull Listener listener) {
         super.addInlineListeners(inlineControl, listener);
-        timeEditor.addSelectionAdapter(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        timeEditor.addSelectionAdapter(SelectionListener.widgetSelectedAdapter(e -> {
                 Event selectionEvent = new Event();
                 selectionEvent.widget = timeEditor.getControl();
                 timeEditor.getControl().notifyListeners(SWT.Selection, selectionEvent);
-            }
-        });
+            }));
         timeEditor.addModifyListener(e -> {
             Event modificationEvent = new Event();
             modificationEvent.widget = timeEditor.getControl();
@@ -166,8 +161,9 @@ public class DateTimeInlineEditor extends BaseValueEditor<Control> {
     protected Control createControl(Composite editPlaceholder) {
         Object value = valueController.getValue();
         valueController.getEditPlaceholder();
-        boolean inline = valueController.getEditType() == IValueController.EditType.INLINE;
-        timeEditor = new CustomTimeEditor(
+        boolean inline = valueController.getEditType() == IValueController.EditType.INLINE ||
+            valueController.getEditType() == IValueController.EditType.PANEL;
+            timeEditor = new CustomTimeEditor(
                 editPlaceholder,
                 SWT.MULTI, true, inline);
         textMode = new TextMode(this, timeEditor, valueController);

@@ -1,22 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?eclipse version="3.2"?>
-<!--
- * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
-  -->
-
 <plugin>
 
     <extension point="org.jkiss.dbeaver.generic.meta">
@@ -25,6 +8,33 @@
     </extension>
 
     <extension point="org.jkiss.dbeaver.dataSourceProvider">
+
+        <dataSourceType
+            id="sap_ase"
+            label="SAP ASE"
+            description="SAP ASE database"
+            dataSourceInformation="Enterprise relational database from SAP"
+            icon="icons/sap_ase_icon.png"
+            iconBig="icons/sap_ase_icon_big.png"
+            logoImage="icons/sap_ase_logo.png"/>
+
+        <dataSourceType
+            id="babelfish"
+            label="Babelfish"
+            description="Babelfish database"
+            dataSourceInformation="Relational database management system"
+            icon="icons/babelfish_icon.png"
+            iconBig="icons/babelfish_icon_big.png"
+            logoImage="icons/babelfish_logo.png"/>
+
+        <dataSourceType
+            id="mssql"
+            label="SQL Server"
+            description="SQL Server database"
+            dataSourceInformation="Enterprise relational database from Microsoft"
+            icon="icons/mssql_icon.png"
+            iconBig="icons/mssql_icon_big.png"
+            logoImage="icons/mssql_logo.png"/>
 
         <!-- SQL Server. New connector replaces all Generic-based SQL Server drivers -->
 
@@ -165,9 +175,8 @@
 
                 <driver
                         id="microsoft"
+                        dataSourceType="mssql"
                         label="SQL Server"
-                        icon="icons/mssql_icon.png"
-                        iconBig="icons/mssql_icon_big.png"
                         category="MS SQL Server"
                         class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                         sampleURL="jdbc:sqlserver://{host}[:{port}][;databaseName={database}]"
@@ -184,8 +193,8 @@
                     <replace provider="mssql" driver="mssql_jdbc_ms_new"/>
                     <replace provider="mssql" driver="mssql_jdbc_legacy"/>
 
-                    <file type="jar" path="maven:/com.microsoft.sqlserver:mssql-jdbc:RELEASE[12.8.0.jre11]" bundle="!drivers.mssql.new"/>
-                    <file type="lib" path="maven:/com.microsoft.sqlserver:mssql-jdbc_auth:RELEASE[12.8.0.x64]" os="win32" arch="x86_64" optional="true" bundle="!drivers.mssql.new"/>
+                    <file type="jar" path="maven:/com.microsoft.sqlserver:mssql-jdbc:RELEASE[13.4.0.jre11]" bundle="!drivers.mssql.new"/>
+                    <file type="lib" path="maven:/com.microsoft.sqlserver:mssql-jdbc_auth:RELEASE[13.4.0.x64]" os="win32" arch="x86_64" optional="true" bundle="!drivers.mssql.new"/>
                     <file type="license" path="https://raw.githubusercontent.com/microsoft/sql-server-samples/master/license.txt" bundle="!drivers.mssql.new"/>
 
                     <file type="jar" path="drivers/mssql/new" bundle="drivers.mssql.new"/>
@@ -202,9 +211,11 @@
 
                 <driver
                         id="azure"
+                        dataSourceType="mssql"
                         label="Azure SQL Server"
-                        icon="icons/azure_icon.png"
+                        icon="icons/azure_sql_server_icon.png"
                         iconBig="icons/azure_sql_server_icon_big.png"
+                        logoImage="icons/azure_logo.png"
                         category="Azure"
                         class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                         sampleURL="jdbc:sqlserver://{host};databaseName={database}"
@@ -218,7 +229,7 @@
 
                     <replace provider="mssql" driver="mssql_jdbc_azure"/>
 
-                    <file type="jar" path="maven:/com.microsoft.sqlserver:mssql-jdbc:RELEASE[12.8.0.jre11]" bundle="!drivers.mssql.new"/>
+                    <file type="jar" path="maven:/com.microsoft.sqlserver:mssql-jdbc:RELEASE[13.4.0.jre11]" bundle="!drivers.mssql.new"/>
                     <file type="license" path="https://raw.githubusercontent.com/microsoft/sql-server-samples/master/license.txt" bundle="!drivers.mssql.new"/>
                     <file type="jar" path="drivers/mssql/new" bundle="drivers.mssql.new"/>
 
@@ -229,9 +240,8 @@
 
                 <driver
                         id="babelfish"
+                        dataSourceType="babelfish"
                         label="Babelfish via TDS (beta)"
-                        icon="icons/bbfsh_icon.png"
-                        iconBig="icons/bbfsh_icon_big.png"
                         class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                         sampleURL="jdbc:sqlserver://{host};databaseName={database}"
                         useURL="false"
@@ -245,7 +255,7 @@
 
                     <replace provider="mssql" driver="mssql_jdbc_babelfish"/>
 
-                    <file type="jar" path="maven:/com.microsoft.sqlserver:mssql-jdbc:RELEASE[12.8.0.jre11]" bundle="!drivers.mssql.new"/>
+                    <file type="jar" path="maven:/com.microsoft.sqlserver:mssql-jdbc:RELEASE[13.4.0.jre11]" bundle="!drivers.mssql.new"/>
                     <file type="license" path="https://raw.githubusercontent.com/microsoft/sql-server-samples/master/license.txt" bundle="!drivers.mssql.new"/>
                     <file type="jar" path="drivers/mssql/new" bundle="drivers.mssql.new"/>
                     <file type="license" path="drivers/mssql/new/LICENSE.txt" bundle="drivers.mssql.new"/>
@@ -254,9 +264,8 @@
                 <!-- jTDS driver - deprecated -->
                 <driver
                         id="jtds"
+                        dataSourceType="mssql"
                         label="jTDS driver"
-                        icon="icons/mssql_icon.png"
-                        iconBig="icons/mssql_icon_big.png"
                         category="MS SQL Server"
                         class="net.sourceforge.jtds.jdbc.Driver"
                         sampleURL="jdbc:jtds:sqlserver://{host}[:{port}][/{database}]"
@@ -286,9 +295,9 @@
                 <!-- Obsolete -->
                 <driver
                     id="mssql_jdbc_jtds"
+                    dataSourceType="mssql"
+                    categories="sql"
                     label="jTDS driver (Deprecated)"
-                    icon="icons/mssql_icon.png"
-                    iconBig="icons/mssql_icon_big.png"
                     category="MS SQL Server"
                     class="net.sourceforge.jtds.jdbc.Driver"
                     sampleURL="jdbc:jtds:sqlserver://{host}[:{port}][/{database}]"
@@ -301,9 +310,9 @@
 
                 <driver
                     id="mssql_jdbc_ms"
+                    dataSourceType="mssql"
+                    categories="sql"
                     label="SQL Server (Deprecated)"
-                    icon="icons/mssql_icon.png"
-                    iconBig="icons/mssql_icon_big.png"
                     category="MS SQL Server"
                     class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                     sampleURL="jdbc:sqlserver://{host}[:{port}][;databaseName={database}]"
@@ -316,9 +325,9 @@
 
                 <driver
                         id="mssql_jdbc_ms_new"
+                        dataSourceType="mssql"
+                        categories="sql"
                         label="SQL Server (Deprecated)"
-                        icon="icons/mssql_icon.png"
-                        iconBig="icons/mssql_icon_big.png"
                         category="MS SQL Server"
                         class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                         sampleURL="jdbc:sqlserver://{host}[:{port}][;databaseName={database}]"
@@ -333,9 +342,12 @@
 
                 <driver
                         id="mssql_jdbc_azure"
+                        dataSourceType="mssql"
+                        categories="sql"
                         label="Azure SQL Server (Deprecated)"
-                        icon="icons/azure_icon.png"
-                        iconBig="icons/azure_icon_big.png"
+                        icon="icons/azure_sql_server_icon.png"
+                        iconBig="icons/azure_sql_server_icon_big.png"
+                        logoImage="icons/azure_logo.png"
                         category="Azure"
                         class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                         sampleURL="jdbc:sqlserver://{host};databaseName={database}"
@@ -347,9 +359,8 @@
 
                 <driver
                         id="mssql_jdbc_legacy"
+                        dataSourceType="mssql"
                         label="SQL Server (Old driver, MS)"
-                        icon="icons/mssql_icon.png"
-                        iconBig="icons/mssql_icon_big.png"
                         category="MS SQL Server"
                         class="com.microsoft.sqlserver.jdbc.SQLServerDriver"
                         sampleURL="jdbc:sqlserver://{host}[:{port}][;databaseName={database}]"
@@ -365,9 +376,8 @@
 
                 <driver
                         id="mssql_jtds_legacy"
+                        dataSourceType="mssql"
                         label="SQL Server (Old driver, jTDS)"
-                        icon="icons/mssql_icon.png"
-                        iconBig="icons/mssql_icon_big.png"
                         category="MS SQL Server"
                         class="net.sourceforge.jtds.jdbc.Driver"
                         sampleURL="jdbc:jtds:sqlserver://{host}[:{port}][/{database}]"
@@ -393,7 +403,7 @@
                     <parameter name="script-delimiter-after-query" value="true"/>
 
                     <file type="jar" path="maven:/net.sourceforge.jtds:jtds:RELEASE" bundle="!drivers.jtds"/>
-                    <file type="license" path="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt" bundle="!drivers.jtds"/>
+                    <file type="license" path="licenses/external/lgpl-2.1.txt"/>
                     <file type="lib" os="win32" arch="x86" path="repo:/drivers/jtds/SSO/x86/ntlmauth.dll" bundle="!drivers.jtds"/>
                     <file type="lib" os="win32" arch="x86_64" path="repo:/drivers/jtds/SSO/x64/ntlmauth.dll" bundle="!drivers.jtds"/>
 
@@ -406,9 +416,11 @@
 
                 <driver
                         id="sybase_jtds"
+                        dataSourceType="sap_ase"
                         label="Sybase jTDS"
                         icon="icons/sybase_icon.png"
                         iconBig="icons/sybase_icon_big.png"
+                        logoImage="icons/sybase_logo.png"
                         class="net.sourceforge.jtds.jdbc.Driver"
                         sampleURL="jdbc:jtds:sybase://{host}[:{port}][/{database}]"
                         useURL="false"
@@ -432,16 +444,17 @@
                     <parameter name="native-format-time" value="''HH:mm:ss.SSS''"/>
 
                     <file type="jar" path="maven:/net.sourceforge.jtds:jtds:RELEASE" bundle="!drivers.jtds"/>
-                    <file type="license" path="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt" bundle="!drivers.jtds"/>
-                    <file type="license" path="drivers/jtds/LICENSE.txt" bundle="drivers.jtds"/>
+                    <file type="license" path="licenses/external/lgpl-2.1.txt"/>
                     <file type="jar" path="drivers/jtds" bundle="drivers.jtds"/>
                 </driver>
 
                 <driver
                         id="sybase_jconn"
+                        dataSourceType="sap_ase"
                         label="Sybase jConnect"
                         icon="icons/sybase_icon.png"
                         iconBig="icons/sybase_icon_big.png"
+                        logoImage="icons/sybase_logo.png"
                         class="com.sybase.jdbc4.jdbc.SybDriver"
                         sampleURL="jdbc:sybase:Tds:{host}[:{port}][?ServiceName={database}]"
                         useURL="false"
@@ -471,10 +484,8 @@
                 </driver>
                 <driver
                         id="sypase_jconn"
+                        dataSourceType="sap_ase"
                         label="SAP ASE jConnect"
-                        icon="icons/sap_ase_icon.png"
-                        iconBig="icons/sap_ase_icon_big.png"
-                        logoImage="icons/sap_ase_logo.png"
                         class="com.sybase.jdbc4.jdbc.SybDriver"
                         sampleURL="jdbc:sybase:Tds:{host}[:{port}][?ServiceName={database}]"
                         useURL="false"
@@ -536,7 +547,7 @@
         <provider
                 class="org.jkiss.dbeaver.ext.mssql.model.data.SQLServerStandardValueHandlerProvider"
                 description="sql server data types provider"
-                id="org.jkiss.dbeaver.ext.mssql.model.data.SQLServerStandardValueHandlerProvider"
+                id="SQLServerStandardValueHandlerProvider"
                 label="SQL Server data types provider">
 
             <datasource id="sqlserver"/>
@@ -548,8 +559,8 @@
     </extension>
 
     <extension point="org.jkiss.dbeaver.sqlDialect">
-        <dialect id="sqlserver" parent="basic" class="org.jkiss.dbeaver.ext.mssql.model.SQLServerDialect" label="SQL Server" description="SQL Server SQL dialect." icon="icons/mssql_icon.png">
-        </dialect>
+        <dialect id="sqlserver" parent="basic" class="org.jkiss.dbeaver.ext.mssql.model.SQLServerDialectMssql" label="SQL Server" description="SQL Server SQL dialect." icon="icons/mssql_icon.png"/>
+        <dialect id="sybase" parent="basic" class="org.jkiss.dbeaver.ext.mssql.model.SQLServerDialectSybase" label="Sybase" description="Sybase SQL dialect." icon="icons/sybase_icon.png"/>
     </extension>
 
     <extension point="org.jkiss.dbeaver.task">
@@ -557,15 +568,15 @@
         <category id="sqlServerTool" parent="sqlserver" name="Tools" description="SQL Server database tools" icon="icons/mssql_icon.png"/>
 
         <!-- SQL tools -->
-        <task id="mssqlToolTableRebuild" name="%tasks.rebuild.table.node.name" description="%tasks.rebuild.table.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="sqlServerTool" handler="org.jkiss.dbeaver.ext.mssql.tasks.SQLServerToolTableRebuild">
+        <task id="mssqlToolTableRebuild" name="%tasks.rebuild.table.node.name" description="%tasks.rebuild.table.node.description" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="sqlServerTool" handler="org.jkiss.dbeaver.ext.mssql.tasks.SQLServerToolTableRebuild">
             <datasource id="sqlserver"/>
             <objectType name="org.jkiss.dbeaver.ext.mssql.model.SQLServerTableBase"/>
         </task>
-        <task id="mssqlToolTriggerEnable" name="Enable trigger" description="Enable trigger(s)" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="sqlServerTool" handler="org.jkiss.dbeaver.ext.mssql.tasks.SQLServerToolTableTriggerEnable">
+        <task id="mssqlToolTriggerEnable" name="Enable trigger" description="Enable trigger(s)" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="sqlServerTool" handler="org.jkiss.dbeaver.ext.mssql.tasks.SQLServerToolTableTriggerEnable">
             <datasource id="sqlserver"/>
             <objectType name="org.jkiss.dbeaver.ext.mssql.model.SQLServerTableTrigger" if="object.canEnable()"/>
         </task>
-        <task id="mssqlToolTriggerDisable" name="Disable trigger" description="Disable trigger(s)" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.png" type="sqlServerTool" handler="org.jkiss.dbeaver.ext.mssql.tasks.SQLServerToolTableTriggerDisable">
+        <task id="mssqlToolTriggerDisable" name="Disable trigger" description="Disable trigger(s)" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/admin.svg" type="sqlServerTool" handler="org.jkiss.dbeaver.ext.mssql.tasks.SQLServerToolTableTriggerDisable">
             <datasource id="sqlserver"/>
             <objectType name="org.jkiss.dbeaver.ext.mssql.model.SQLServerTableTrigger" if="object.canDisable()"/>
         </task>
@@ -576,15 +587,20 @@
                 type="config"
                 id="mssql_ssl"
                 codeName="SSL"
+                prefix="ssl"
                 label="SSL"
                 description="SSL settings"
                 desktop="false"
                 secured="false"
-                pinned="true"
-                order="100"
+                order="2"
                 handlerClass="org.jkiss.dbeaver.ext.mssql.model.SQLServerSSLHandlerImpl">
+            <propertyGroup label="Method">
+                <property id="ssl.method" label="Method" type="string" validValues="KEYSTORE" defaultValue="KEYSTORE"
+                          desktop="true" hidden="true"/>
+            </propertyGroup>
             <propertyGroup label="Parameters">
                 <property id="ssl.keystore.value" label="Keystore" type="file" features="secured,password,file"/>
+                <property id="ssl.keystore" label="Keystore path" type="string" desktop="true"/>
                 <property id="ssl.keystore.password" label="Keystore password" type="string" features="secured,password"/>
                 <property id="sslKeyStoreHostname" label="Certificate hostname" type="string"/>
             </propertyGroup>

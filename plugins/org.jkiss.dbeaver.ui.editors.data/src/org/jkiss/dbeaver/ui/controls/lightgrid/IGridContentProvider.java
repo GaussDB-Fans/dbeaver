@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPImage;
 
+import java.util.List;
+
 public interface IGridContentProvider extends IContentProvider {
 
     enum ElementState {
@@ -38,6 +40,9 @@ public interface IGridContentProvider extends IContentProvider {
     int STATE_TRANSFORMED = 1 << 2;
     int STATE_TOGGLE = 1 << 3;
     int STATE_DECORATED = 1 << 4;
+    int STATE_EXPANDED = 1 << 5;
+    int STATE_COLLAPSED = 1 << 6;
+    int STATE_BOOLEAN = 1 << 7;
 
     int ALIGN_LEFT = 0;
     int ALIGN_CENTER = 1;
@@ -70,8 +75,10 @@ public interface IGridContentProvider extends IContentProvider {
 
     int getSortOrder(@Nullable IGridColumn element);
 
+    @NotNull
     ElementState getDefaultState(@NotNull IGridColumn element);
 
+    @NotNull
     IGridStatusColumn[] getStatusColumns();
 
     int getColumnPinIndex(@NotNull IGridColumn element);
@@ -80,7 +87,7 @@ public interface IGridContentProvider extends IContentProvider {
 
     boolean isElementSupportsSort(@Nullable IGridColumn element);
 
-    boolean isElementReadOnly(IGridColumn element);
+    boolean isElementReadOnly(@NotNull IGridColumn element);
 
     boolean isElementExpandable(@NotNull IGridItem item);
 
@@ -89,24 +96,37 @@ public interface IGridContentProvider extends IContentProvider {
     /**
      * Checks for additional data read according to the specified cell/row
      */
-    void validateDataPresence(IGridColumn colElement, IGridRow rowElement);
+    void validateDataPresence(@NotNull IGridColumn colElement, @NotNull IGridRow rowElement);
 
     /**
      * Returns cell information.
      * TODO: add returnColors parameter for optimization
      */
-    CellInformation getCellInfo(IGridColumn colElement, IGridRow rowElement, boolean selected);
+    @NotNull
+    CellInformation getCellInfo(@NotNull IGridColumn colElement, @NotNull IGridRow rowElement, boolean selected);
 
-    boolean isVoidCell(IGridColumn gridColumn, IGridRow gridRow);
+    boolean isVoidCell(@NotNull IGridColumn gridColumn, @NotNull IGridRow gridRow);
 
     /**
      * @param formatString Format string values or return raw values
      *
      */
-    Object getCellValue(IGridColumn colElement, IGridRow rowElement, boolean formatString);
+    @Nullable
+    Object getCellValue(@NotNull IGridColumn colElement, @NotNull IGridRow rowElement, boolean formatString);
 
     @NotNull
-    String getCellLinkText(IGridColumn colElement, IGridRow rowElement);
+    String getCellLinkText(@NotNull IGridColumn colElement, @NotNull IGridRow rowElement);
+
+    @Nullable
+    String getCellToolTip(@NotNull IGridColumn colElement, @NotNull IGridRow rowElement);
+
+    @Nullable
+    List<IGridHint> getCellHints(@NotNull IGridColumn colElement, @NotNull IGridRow rowElement, @Nullable Object cellValue, int options);
+
+    @Nullable
+    List<IGridHint> getColumnHints(@NotNull IGridItem element, int options);
+
+    int getColumnHintsWidth(@NotNull IGridColumn colElement);
 
     // Resets all cached colors
     void resetColors();

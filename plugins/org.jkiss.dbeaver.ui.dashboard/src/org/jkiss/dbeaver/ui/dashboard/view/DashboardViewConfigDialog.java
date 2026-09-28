@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,13 @@ package org.jkiss.dbeaver.ui.dashboard.view;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IDialogSettings;
 import org.eclipse.osgi.util.NLS;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.widgets.*;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Text;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.rm.RMConstants;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.ui.UIUtils;
@@ -52,13 +55,19 @@ public class DashboardViewConfigDialog extends BaseDialog {
         return null;//UIUtils.getDialogSettings(DIALOG_ID);
     }
 
+    @NotNull
     @Override
-    protected Composite createDialogArea(Composite parent)
+    protected Composite createDialogArea(@NotNull Composite parent)
     {
         Composite composite = super.createDialogArea(parent);
 
         {
-            Group viewGroup = UIUtils.createControlGroup(composite, UIDashboardMessages.dialog_dashboard_view_config_group_viewcfg, 2, GridData.FILL_HORIZONTAL, 0);
+            Composite viewGroup = UIUtils.createTitledComposite(
+                composite,
+                UIDashboardMessages.dialog_dashboard_view_config_group_viewcfg,
+                2,
+                GridData.FILL_HORIZONTAL
+            );
 
             Text dashboardIdText = UIUtils.createLabelText(viewGroup,
                 "ID",
@@ -107,12 +116,8 @@ public class DashboardViewConfigDialog extends BaseDialog {
             );
             ((GridData) managerButton.getLayoutData()).horizontalAlignment = GridData.BEGINNING;
             ((GridData) managerButton.getLayoutData()).grabExcessHorizontalSpace = true;
-            managerButton.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    new DashboardManagerDialog(UIUtils.getActiveWorkbenchShell()).open();
-                }
-            });
+            managerButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+                new DashboardManagerDialog(UIUtils.getActiveWorkbenchShell()).open()));
         }
         super.createButtonsForButtonBar(parent);
     }

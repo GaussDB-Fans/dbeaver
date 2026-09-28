@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,10 +29,9 @@ import java.util.List;
  * Dictionary table (entity).
  * May return possible values for a set of attributes.
  */
-public interface DBSDictionary
-{
+public interface DBSDictionary {
     /**
-     * Checks that this constrain supports key enumerations.
+     * Checks that this constraint supports key enumerations.
      * Usually it depends on constraint type (enumerations makes sense only for unique constraints).
      * @return true or false
      */
@@ -44,7 +43,7 @@ public interface DBSDictionary
      * @param monitor               session
      * @param keyColumn             enumeration column.
      * @param keyPattern            pattern for enumeration values. If null or empty then returns full enumeration set
-     * @param searchText
+     * @param searchText            description text to search
      * @param preceedingKeys        other constrain key values. May be null.
      * @param caseInsensitiveSearch use case-insensitive search for {@code keyPattern}
      * @param sortAsc               ascending sorting (irrelevant is {@code sortByValue} is false)
@@ -70,18 +69,18 @@ public interface DBSDictionary
     @NotNull
     List<DBDLabelValuePair> getDictionaryValues(
         @NotNull DBRProgressMonitor monitor,
-        @NotNull DBSEntityAttribute keyColumn,
-        @NotNull List<Object> keyValues,
-        @Nullable List<DBDAttributeValue> preceedingKeys,
+        @NotNull List<DBSEntityAttribute> keyColumns,
+        @NotNull List<Object[]> keyValues,
+        @Nullable List<DBDAttributeValue[]> preceedingKeys,
         boolean sortByValue,
-        boolean sortAsc
-    ) throws DBException;
+        boolean sortAsc,
+        boolean omitNonDescriptive) throws DBException;
 
     @NotNull
     DBSDictionaryAccessor getDictionaryAccessor(
         @NotNull DBRProgressMonitor monitor,
-        @Nullable List<DBDAttributeValue> precedingKeys,
         @NotNull DBSEntityAttribute keyColumn,
+        @Nullable List<DBDAttributeValue> restColumns,
         boolean sortAsc,
         boolean sortByDesc
     ) throws DBException;

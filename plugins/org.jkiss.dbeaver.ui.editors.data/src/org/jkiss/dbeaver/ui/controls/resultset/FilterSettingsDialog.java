@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,10 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IDialogSettings;
 import org.eclipse.jface.viewers.*;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.custom.CTabFolder;
+import org.eclipse.swt.custom.CTabItem;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
@@ -49,10 +49,11 @@ import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
 import org.jkiss.dbeaver.ui.controls.resultset.spreadsheet.SpreadsheetPresentation;
 import org.jkiss.dbeaver.ui.dialogs.HelpEnabledDialog;
 import org.jkiss.dbeaver.utils.RuntimeUtils;
+import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
-import java.util.List;
 import java.util.*;
+import java.util.List;
 
 class FilterSettingsDialog extends HelpEnabledDialog {
     private static final String DIALOG_ID = "DBeaver.FilterSettingsDialog";//$NON-NLS-1$
@@ -72,7 +73,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
     private Text whereText;
     private Text orderText;
     // Keep constraints in a copy because we use this list as table viewer model
-    private java.util.List<DBDAttributeConstraint> constraints;
+    private DBDAttributeConstraint[] constraints;
     private ToolItem moveTopButton;
     private ToolItem moveUpButton;
     private ToolItem moveDownButton;
@@ -80,13 +81,12 @@ class FilterSettingsDialog extends HelpEnabledDialog {
     private final Comparator<DBDAttributeBinding> activeSorter = POSITION_SORTER;
     private FilterSettingsTreeEditor treeEditor;
 
-    FilterSettingsDialog(ResultSetViewer resultSetViewer)
-    {
+    FilterSettingsDialog(ResultSetViewer resultSetViewer) {
         super(resultSetViewer.getControl().getShell(), IHelpContextIds.CTX_DATA_FILTER);
         this.resultSetViewer = resultSetViewer;
         this.dataFilter = new DBDDataFilter(resultSetViewer.getModel().getDataFilter());
-        this.constraints = new ArrayList<>(dataFilter.getConstraints());
-        this.constraints.sort(Comparator.comparingInt(DBDAttributeConstraintBase::getVisualPosition));
+        this.constraints = dataFilter.getConstraints();
+        Arrays.sort(this.constraints, Comparator.comparingInt(DBDAttributeConstraintBase::getVisualPosition));
         DBDAttributeBinding[] modelAttrs = resultSetViewer.getModel().getAttributes();
         this.attributes = new ArrayList<>(modelAttrs.length);
         Collections.addAll(this.attributes, modelAttrs);
@@ -107,14 +107,15 @@ class FilterSettingsDialog extends HelpEnabledDialog {
 
         Composite composite = super.createDialogArea(parent);
 
-        TabFolder tabFolder = new TabFolder(composite, SWT.NONE);
+        CTabFolder tabFolder = new CTabFolder(composite, SWT.NONE);
         GridData gd = new GridData(GridData.FILL_BOTH);
         gd.minimumWidth = 200;
         gd.widthHint = 400;
         tabFolder.setLayoutData(gd);
 
         {
-            Composite columnsGroup = UIUtils.createPlaceholder(tabFolder, 1);
+            Composite columnsGroup = UIUtils.createComposite(tabFolder, 1);
+            columnsGroup.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 
             new FilteredTree(columnsGroup, SWT.MULTI | SWT.FULL_SELECTION, new NamedObjectPatternFilter(), true, false) {
                 @Override
@@ -131,7 +132,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
                     final DBDAttributeBinding binding = (DBDAttributeBinding) cell.getElement();
                     final DBDAttributeConstraint constraint = getBindingConstraint(binding);
                     cell.setText(constraint.getAttribute().getName());
-                    cell.setImage(DBeaverIcons.getImage(DBValueFormatting.getObjectImage(binding.getMetaAttribute())));
+                    cell.setImage(DBeaverIcons.getImage(DBValueFormatting.getObjectImage(binding.getAttribute())));
                 }
             });
 
@@ -271,11 +272,9 @@ class FilterSettingsDialog extends HelpEnabledDialog {
             treeEditor = new FilterSettingsTreeEditor(columnsTree);
 
             {
-                ToolBar toolbar = new ToolBar(columnsGroup, SWT.HORIZONTAL | SWT.RIGHT);
-                gd = new GridData(GridData.FILL_HORIZONTAL);
-                gd.verticalIndent = 3;
-                toolbar.setLayoutData(gd);
-                toolbar.setLayout(new FillLayout());
+                Composite tph = UIUtils.createComposite(columnsGroup, 1);
+                ToolBar toolbar = new ToolBar(tph, SWT.HORIZONTAL | SWT.FLAT);
+                toolbar.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
                 moveTopButton = createToolItem(toolbar, ResultSetMessages.dialog_toolbar_move_to_top, UIIcon.ARROW_TOP, () -> {
                     moveSelectedItems(false, false);
                 });
@@ -316,9 +315,9 @@ class FilterSettingsDialog extends HelpEnabledDialog {
                     refreshData();
                 });
                 showNoneButton.setImage(UIUtils.getShardImage(ISharedImages.IMG_ELCL_REMOVEALL));
-                createToolItem(toolbar, ResultSetMessages.dialog_toolbar_reset, UIIcon.REFRESH, () -> {
+                createToolItem(toolbar, ResultSetMessages.dialog_toolbar_reset, UIIcon.ARROW_RESET, () -> {
                     dataFilter.reset();
-                    constraints = new ArrayList<>(dataFilter.getConstraints());
+                    constraints = dataFilter.getConstraints();
                     refreshData();
                     //columnsViewer.refresh();
                     orderText.setText(""); //$NON-NLS-1$
@@ -327,7 +326,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
                 columnsViewer.addSelectionChangedListener(event -> updateButtons());
 
             }
-            TabItem libsTab = new TabItem(tabFolder, SWT.NONE);
+            CTabItem libsTab = new CTabItem(tabFolder, SWT.NONE);
             libsTab.setText(ResultSetMessages.controls_resultset_filter_group_columns);
             libsTab.setToolTipText(ResultSetMessages.controls_resultset_filter_group_columns_tooltip_text);
             libsTab.setControl(columnsGroup);
@@ -387,13 +386,13 @@ class FilterSettingsDialog extends HelpEnabledDialog {
     }
 
     private int swapVisualPositions(int currentVisualPosition, int i) {
-        final DBDAttributeConstraint currentConstraint = constraints.get(currentVisualPosition);
+        final DBDAttributeConstraint currentConstraint = constraints[currentVisualPosition];
         currentVisualPosition = currentConstraint.getVisualPosition();
-        final DBDAttributeConstraint swappingConstraint = constraints.get(i);
+        final DBDAttributeConstraint swappingConstraint = constraints[i];
         final int swappingConstraintVisualPosition = swappingConstraint.getVisualPosition();
         currentConstraint.setVisualPosition(swappingConstraintVisualPosition);
         swappingConstraint.setVisualPosition(currentVisualPosition);
-        Collections.swap(constraints, i, currentVisualPosition);
+        ArrayUtils.swap(constraints, i, currentVisualPosition);
         return swappingConstraintVisualPosition;
     }
 
@@ -423,7 +422,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
         moveBottomButton.setEnabled(newIndex < getItemsCount() - 1);
     }
 
-    private void createCustomFilters(TabFolder tabFolder)
+    private void createCustomFilters(CTabFolder tabFolder)
     {
         Composite filterGroup = new Composite(tabFolder, SWT.NONE);
         filterGroup.setLayoutData(new GridData(GridData.FILL_BOTH));
@@ -448,7 +447,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
             ControlEnableState.disable(filterGroup);
         }
 
-        TabItem libsTab = new TabItem(tabFolder, SWT.NONE);
+        CTabItem libsTab = new CTabItem(tabFolder, SWT.NONE);
         libsTab.setText(ResultSetMessages.controls_resultset_filter_group_custom);
         libsTab.setToolTipText(ResultSetMessages.controls_resultset_filter_group_custom_tooltip_text);
         libsTab.setControl(filterGroup);
@@ -636,12 +635,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
             //item.setText(text);
             item.setToolTipText(text);
         }
-        item.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                action.run();
-            }
-        });
+        item.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> action.run()));
         return item;
     }
 
@@ -701,7 +695,7 @@ class FilterSettingsDialog extends HelpEnabledDialog {
         }
 
         public void okPressed() {
-            if (RuntimeUtils.isMacOS() && lastTreeItem != null && lastEditor != null) {
+            if (RuntimeUtils.isMacOS() && lastTreeItem != null && lastEditor != null && !lastEditor.isDisposed()) {
                 saveEditorValue(lastEditor, COLUMN_CRITERIA_INDEX, lastTreeItem);
             }
         }

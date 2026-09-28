@@ -9,10 +9,18 @@
     </extension>
 
     <extension point="org.jkiss.dbeaver.dataSourceProvider">
+        <dataSourceType
+            id="ocient"
+            label="Ocient"
+            description="Ocient database"
+            dataSourceInformation="High-performance analytical database platform"
+            icon="icons/ocient_icon.png"
+            iconBig="icons/ocient_icon_big.png"/>
         <datasource
                 class="org.jkiss.dbeaver.ext.ocient.OcientDataSourceProvider"
                 description="%datasource.bq.description"
                 id="ocient"
+                dataSourceType="ocient"
                 parent="generic"
                 label="Ocient DB"
                 icon="icons/ocient_icon.png"
@@ -22,15 +30,13 @@
                         id="ocient_jdbc"
                         label="Ocient"
                         class="com.ocient.jdbc.JDBCDriver"
-                        icon="icons/ocient_icon.png"
-                        iconBig="icons/ocient_icon_big.png"
                         sampleURL="jdbc:ocient://{host}:{port}/{database}"
                         defaultPort="4050"
                         description="Ocient JDBC driver"
                         webURL=""
                         categories="sql,analytic">
                     <file type="jar" path="maven:/com.ocient:ocient-jdbc4:RELEASE"/>
-                    <file type="license" path="https://www.apache.org/licenses/LICENSE-2.0.txt"/>
+                    <file type="license" path="licenses/external/asl-2.0.txt"/>
                 </driver>
              </drivers>
         </datasource>

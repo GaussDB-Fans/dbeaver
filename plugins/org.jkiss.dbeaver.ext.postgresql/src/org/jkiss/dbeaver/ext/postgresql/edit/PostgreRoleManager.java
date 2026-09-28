@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.cache.DBSObjectCache;
 import org.jkiss.utils.CommonUtils;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -46,6 +47,7 @@ import java.util.Map;
  * PostgreRoleManager
  */
 public class PostgreRoleManager extends SQLObjectEditor<PostgreRole, PostgreDataSource> implements DBEObjectRenamer<PostgreRole> {
+    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public long getMakerOptions(@NotNull DBPDataSource dataSource)
@@ -61,7 +63,28 @@ public class PostgreRoleManager extends SQLObjectEditor<PostgreRole, PostgreData
     }
 
     @Override
-    protected PostgreRole createDatabaseObject(@NotNull DBRProgressMonitor monitor, @NotNull DBECommandContext context, Object container, Object copyFrom, @NotNull Map<String, Object> options) throws DBException {
+    public boolean canEditObject(@NotNull PostgreRole object) {
+        return !object.isPublicRole() && super.canEditObject(object);
+    }
+
+    @Override
+    public boolean canDeleteObject(@NotNull PostgreRole object) {
+        return !object.isPublicRole() && super.canDeleteObject(object);
+    }
+
+    @Override
+    public boolean canRenameObject(@NotNull PostgreRole object) {
+        return !object.isPublicRole();
+    }
+
+    @Override
+    protected PostgreRole createDatabaseObject(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBECommandContext context,
+        @NotNull Object container,
+        @Nullable Object copyFrom,
+        @NotNull Map<String, Object> options
+    ) throws DBException {
         return new PostgreRole((PostgreDatabase) container, "NewRole", "", true);
     }
 
@@ -147,6 +170,15 @@ public class PostgreRoleManager extends SQLObjectEditor<PostgreRole, PostgreData
             options.append(" PASSWORD ").append("'").append(role.getDataSource().getSQLDialect().escapeString(role.getPassword())).append("'");
             command.setDisableSessionLogging(true); // Hide password from Query Manager
         }
+
+        if (role.getValidUntil() != null) {
+            options.append(" VALID UNTIL ").append(SQLUtils.quoteString(role, TIMESTAMP_FORMATTER.format(role.getValidUntil())));
+        }
+        
+        if (create || command.hasProperty("connLimit")) { 
+            options.append(" CONNECTION LIMIT ").append(role.getConnLimit()); 
+        }
+
         if (options.length() != 0 && extension instanceof PostgreServerCockroachDB) {
             // FIXME: use some generic approach
             script.append(" WITH");

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+
+<plugin>
+    <extension point="org.jkiss.dbeaver.dataSourceConfigurator">
+    <configurator dataSource="kingbase" class="org.jkiss.dbeaver.ext.kingbase.ui.views.KingbaseConnectionPage"/>
+  </extension>
+  <extension point="org.jkiss.dbeaver.databaseEditor">
+    
+    <configurator class="org.jkiss.dbeaver.ext.kingbase.ui.config.KingbaseDatabaseConfigurator">
+      <objectType name="org.jkiss.dbeaver.ext.kingbase.model.KingbaseDatabase"/>
+    </configurator>
+   
+    <configurator class="org.jkiss.dbeaver.ext.kingbase.ui.config.KingbaseProcedureConfigurator">
+      <objectType name="org.jkiss.dbeaver.ext.kingbase.model.KingbaseProcedure"/>
+    </configurator>
+    <configurator class="org.jkiss.dbeaver.ext.kingbase.ui.config.KingbaseFunctionConfigurator">
+      <objectType name="org.jkiss.dbeaver.ext.kingbase.model.KingbaseFunction"/>
+    </configurator>
+  </extension>
+</plugin>

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,10 +41,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -55,6 +58,7 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
     private static final Log log = Log.getLog(TaskRunJob.class);
 
     private static final AtomicInteger taskNumber = new AtomicInteger(0);
+    private static final long PROCESS_ID = ProcessHandle.current().pid();
 
     private final TaskImpl task;
     private final Locale locale;
@@ -63,11 +67,12 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
     private DBRProgressMonitor activeMonitor;
     private DBTTaskRunStatus taskRunStatus = new DBTTaskRunStatus();
 
-    private long taskStartTime;
-    private long elapsedTime;
+    private Instant taskStartTime = Instant.now();
+    private Duration elapsedTime = Duration.ZERO;
     private Throwable taskError;
+    private volatile String runId;
 
-    private boolean canceledByTimeOut = false;
+    private final AtomicBoolean canceledByTimeOut = new AtomicBoolean();
 
     public TaskRunJob(TaskImpl task, Locale locale, DBTTaskExecutionListener executionListener) {
         super("Task [" + task.getType().getName() + "] runner - " + task.getName());
@@ -80,13 +85,20 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
     }
 
     @Override
-    protected IStatus run(DBRProgressMonitor monitor) {
+    public void run(boolean fork, boolean cancelable, @NotNull DBRRunnableWithProgress runnable)
+            throws InvocationTargetException, InterruptedException {
+        runnable.run(activeMonitor);
+    }
+
+    @NotNull
+    @Override
+    protected IStatus run(@NotNull DBRProgressMonitor monitor) {
         Date startTime = new Date();
         SimpleDateFormat dateFormat = new SimpleDateFormat(GeneralUtils.DEFAULT_TIMESTAMP_PATTERN, Locale.getDefault()); //$NON-NLS-1$
         dateFormat.setTimeZone(TimeZone.getTimeZone(TimezoneRegistry.getUserDefaultTimezone()));
-        String taskId = dateFormat.format(startTime) + "_" + taskNumber.incrementAndGet();
+        runId = dateFormat.format(startTime) + "_" + taskNumber.incrementAndGet();
         TaskRunImpl taskRun = new TaskRunImpl(
-            taskId,
+            runId,
             new Date(),
             System.getProperty(StandardConstants.ENV_USER_NAME),
             GeneralUtils.getProductTitle(),
@@ -97,22 +109,24 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
 
         try (PrintStream logStream = new PrintStream(Files.newOutputStream(logFile), true, StandardCharsets.UTF_8)) {
             taskLog = Log.getLog(TaskRunJob.class);
+            PrintStream oldLogWriter = Log.getLogWriter();
             Log.setLogWriter(logStream);
-            taskLog.info(String.format("Task '%s' (%s) started", task.getName(), task.getId()));
+            taskLog.info(getExecutionDescription() + " started (mode=" + (isRunDirectly() ? "direct" : "background") + ")");
             monitor.beginTask("Run task '" + task.getName() + " (" + task.getType().getName() + ")", 1);
             try {
                 taskRunStatus = executeTask(new TaskLoggingProgressMonitor(monitor, task), logStream);
                 taskRun.setExtraMessage(taskRunStatus.getResultMessage());
             } catch (Throwable e) {
                 taskError = e;
-                taskLog.error("Task fatal error", e);
+                taskLog.error(getExecutionDescription() + " execution failed", e);
             } finally {
                 monitor.done();
              
-                taskRun.setRunDuration(elapsedTime);
+                taskRun.setRunDuration(elapsedTime.toMillis());
                 if (activeMonitor.isCanceled() || monitor.isCanceled()) {
                     taskRun.setErrorMessage("Canceled");
-                    taskLog.info(String.format("Task '%s' (%s) cancelled after %s ms", task.getName(), task.getId(), elapsedTime));
+                    taskLog.info(getExecutionDescription() + " canceled after " + elapsedTime.toMillis() + " ms"
+                        + (canceledByTimeOut.get() ? " (timeout)" : ""));
                 } else if (taskError != null) {
                     String errorMessage = taskError.getMessage();
                     if (CommonUtils.isEmpty(errorMessage)) {
@@ -122,27 +136,30 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
                     StringWriter buf = new StringWriter();
                     taskError.printStackTrace(new PrintWriter(buf, true));
                     taskRun.setErrorStackTrace(buf.toString());
-                    taskLog.info(String.format("Task '%s' (%s) finished with errors in %s ms", task.getName(), task.getId(), elapsedTime));
+                    taskLog.info(getExecutionDescription() + " finished with errors in " + elapsedTime.toMillis() + " ms");
                 } else {
-                    taskLog.info(String.format("Task '%s' (%s) finished successfully in %s ms", task.getName(), task.getId(), elapsedTime));
+                    taskLog.info(getExecutionDescription() + " finished successfully in " + elapsedTime.toMillis() + " ms");
                 }
                 task.updateRun(taskRun);
                 taskLog.flush();
-                Log.setLogWriter(null);
+                Log.setLogWriter(oldLogWriter);
             }
         } catch (IOException e) {
-            log.error("Error opening task run log file", e);
+            log.error("Error opening run log for " + getExecutionDescription() + ": " + logFile, e);
         }
         return Status.OK_STATUS;
     }
 
-    private DBTTaskRunStatus executeTask(DBRProgressMonitor monitor, PrintStream logWriter) throws DBException, InterruptedException {
+    private DBTTaskRunStatus executeTask(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull PrintStream logWriter
+    ) throws DBException, InterruptedException {
         activeMonitor = monitor;
         DBTaskUtils.confirmTaskOrThrow(task, taskLog, logWriter);
         DBTTaskHandler taskHandler = task.getType().createHandler();
         DBTTaskRunStatus taskStatus = taskHandler.executeTask(this, task, locale, taskLog, logWriter, executionListener);
         if (monitor.isCanceled()) {
-            if (canceledByTimeOut) {
+            if (canceledByTimeOut.get()) {
                 taskStatus.setResultMessage("by timeout reached");
             }
             if (taskStatus.getResultMessage() == null) {
@@ -150,11 +167,6 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
             }
         }
         return taskStatus;
-    }
-
-    @Override
-    public void run(boolean fork, boolean cancelable, DBRRunnableWithProgress runnable) throws InvocationTargetException, InterruptedException {
-        runnable.run(activeMonitor);
     }
 
     @NotNull
@@ -177,14 +189,14 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
 
         @Override
         public void taskStarted(@Nullable DBTTask task) {
-            taskStartTime = System.currentTimeMillis();
+            taskStartTime = Instant.now();
             parent.taskStarted(task);
         }
 
         @Override
         public void taskFinished(@Nullable DBTTask task, @Nullable Object result, @Nullable Throwable error, @Nullable Object settings) {
             parent.taskFinished(task, result, error, settings);
-            elapsedTime = System.currentTimeMillis() - taskStartTime;
+            elapsedTime = getElapsedTime();
             taskError = error;
         }
 
@@ -194,20 +206,32 @@ public class TaskRunJob extends AbstractJob implements DBRRunnableContext {
         }
     }
 
-    /**
-     * Cancel task by time reached
-     */
-    public void cancelByTimeReached() {
-        if (task.getMaxExecutionTime() > 0
-            && taskStartTime > 0
-            && (System.currentTimeMillis() - taskStartTime) > (task.getMaxExecutionTime() * 1000L)) {
-            canceledByTimeOut = true;
-            cancel();
-            activeMonitor.getNestedMonitor().setCanceled(true);
-            if (isRunDirectly()) {
-                canceling();
-            }
+    public void cancelByTimeout() {
+        if (canceledByTimeOut.compareAndSet(false, true)) {
+            taskLog.info("Timeout cancellation requested for " + getExecutionDescription()
+                + " [elapsedMs=" + getElapsedTime().toMillis() + ", limitMs=" + task.getMaxExecutionTime().toMillis() + "]");
+        }
+        cancel();
+        activeMonitor.getNestedMonitor().setCanceled(true);
+        if (isRunDirectly()) {
+            canceling();
         }
     }
 
+    @NotNull
+    String getExecutionDescription() {
+        return "Task '" + task.getName() + "' [project=" + task.getProject().getId()
+            + ", task=" + task.getId() + ", type=" + task.getType().getId()
+            + ", run=" + (runId == null ? "pending" : runId) + ", pid=" + PROCESS_ID + "]";
+    }
+
+    @NotNull
+    public Duration getElapsedTime() {
+        return Duration.between(taskStartTime, Instant.now());
+    }
+
+    @NotNull
+    public TaskImpl getTask() {
+        return task;
+    }
 }

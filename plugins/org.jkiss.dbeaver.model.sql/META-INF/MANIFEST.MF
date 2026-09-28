@@ -3,9 +3,9 @@ Bundle-ManifestVersion: 2
 Bundle-Vendor: DBeaver Corp
 Bundle-Name: DBeaver SQL Model
 Bundle-SymbolicName: org.jkiss.dbeaver.model.sql;singleton:=true
-Bundle-Version: 1.0.133.qualifier
-Bundle-Release-Date: 20241118
-Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-Version: 1.0.178.qualifier
+Bundle-Release-Date: 20261005
+Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-ActivationPolicy: lazy
 Bundle-Activator: org.jkiss.dbeaver.model.sql.internal.SQLModelActivator
 Export-Package: org.jkiss.dbeaver.model.sql,
@@ -38,12 +38,10 @@ Export-Package: org.jkiss.dbeaver.model.sql,
  org.jkiss.dbeaver.model.text,
  org.jkiss.dbeaver.model.text.parser,
  org.jkiss.dbeaver.model.text.parser.rules
-Bundle-ClassPath: .
-Require-Bundle: org.eclipse.core.runtime,
- com.google.gson,
+Require-Bundle: org.eclipse.core.expressions,
  org.eclipse.text;visibility:=reexport,
  org.jkiss.dbeaver.model;visibility:=reexport,
- org.jkiss.dbeaver.model.lsm
+ org.jkiss.dbeaver.model.lsm;visibility:=reexport
 Bundle-Localization: OSGI-INF/l10n/bundle
 Automatic-Module-Name: org.jkiss.dbeaver.model.sql
 Service-Component: META-INF/component-sql-dialect-registry.xml

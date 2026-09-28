@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,22 +27,23 @@ import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.DBPContextProvider;
 import org.jkiss.dbeaver.model.DBPMessageType;
 import org.jkiss.dbeaver.model.DBPObject;
-import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
-import org.jkiss.dbeaver.model.data.DBDDataFilter;
-import org.jkiss.dbeaver.model.data.DBDDataReceiver;
+import org.jkiss.dbeaver.model.data.*;
+import org.jkiss.dbeaver.model.data.resultset.ResultSetSaveSettings;
 import org.jkiss.dbeaver.model.edit.DBEPersistAction;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSEntityAssociation;
+import org.jkiss.dbeaver.ui.controls.resultset.internal.ResultSetMessages;
 import org.jkiss.dbeaver.ui.data.IDataController;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
  * ResultSet controller.
  * This interface is not supposed to be implemented by clients.
  */
-public interface IResultSetController extends IDataController, DBPContextProvider, DBPObject {
+public interface IResultSetController extends IDataController, DBPContextProvider, DBPObject, DBDResultSetDataProvider {
 
     String MENU_ID_EDIT = "edit";
     String MENU_ID_VIEW = "view";
@@ -56,9 +57,20 @@ public interface IResultSetController extends IDataController, DBPContextProvide
     String RESULTS_CONTEXT_ID = "org.jkiss.dbeaver.ui.context.resultset";
 
     enum ColumnOrder {
-        ASC,
-        DESC,
-        NONE
+        ASC(ResultSetMessages.controls_resultset_viewer_sorting_order_ascending),
+        DESC(ResultSetMessages.controls_resultset_viewer_sorting_order_descending),
+        NONE(ResultSetMessages.controls_resultset_viewer_sorting_order_none);
+
+        private final String text;
+
+        ColumnOrder(@NotNull String text) {
+            this.text = text;
+        }
+
+        @NotNull
+        public String getText() {
+            return text;
+        }
     }
 
     enum RowPlacement {
@@ -66,6 +78,15 @@ public interface IResultSetController extends IDataController, DBPContextProvide
         AFTER_SELECTION,
         AT_END
     }
+
+    enum ContextMenuLocation {
+        COLUMN_HEADER,
+        ROW_HEADER,
+        TOP_LEFT,
+        DATA,
+        UNKNOWN
+    }
+
 
     @NotNull
     IResultSetContainer getContainer();
@@ -93,7 +114,8 @@ public interface IResultSetController extends IDataController, DBPContextProvide
 
     String getReadOnlyStatus();
 
-    String getAttributeReadOnlyStatus(DBDAttributeBinding attr, boolean checkEntity, boolean checkKey);
+    @Nullable
+    String getAttributeReadOnlyStatus(@NotNull DBDAttributeBinding attr, boolean checkEntity, boolean checkKey);
 
     boolean isPanelsVisible();
 
@@ -151,7 +173,14 @@ public interface IResultSetController extends IDataController, DBPContextProvide
      */
     void redrawData(boolean attributesChanged, boolean rowsChanged);
 
-    void fillContextMenu(@NotNull IMenuManager manager, @Nullable DBDAttributeBinding attr, @Nullable ResultSetRow row, int[] rowIndexes);
+    void fillContextMenu(
+        @NotNull IMenuManager manager,
+        @Nullable DBDAttributeBinding attr,
+        @Nullable ResultSetRow row,
+        int[] rowIndexes,
+        @Nullable ResultSetValuePath valuePath,
+        @NotNull ContextMenuLocation menuLocation
+    );
 
     @Nullable
     ResultSetRow getCurrentRow();
@@ -160,6 +189,11 @@ public interface IResultSetController extends IDataController, DBPContextProvide
 
     @NotNull
     ResultSetRow addNewRow(@NotNull RowPlacement placement, boolean copyCurrent, boolean updatePresentation);
+
+    /**
+     * Adds empty rows at the specified visual index without updating the presentation.
+     */
+    void preserveNewRows(int rowIndex, int rowCount);
 
     /**
      * Fills rows in current selection with values from row above/below it.
@@ -176,10 +210,20 @@ public interface IResultSetController extends IDataController, DBPContextProvide
     /**
      * Navigates to association. One of @association OR @attr must be specified.
      */
-    void navigateAssociation(@NotNull DBRProgressMonitor monitor, @NotNull ResultSetModel model, @NotNull DBSEntityAssociation association, @NotNull List<ResultSetRow> rows, boolean newWindow)
+    void navigateAssociation(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull ResultSetModel model,
+        @NotNull DBSEntityAssociation association,
+        @NotNull List<? extends DBDValueRow> rows,
+        boolean newWindow)
         throws DBException;
 
-    void navigateReference(@NotNull DBRProgressMonitor monitor, @NotNull ResultSetModel bindingsModel, @NotNull DBSEntityAssociation association, @NotNull List<ResultSetRow> rows, boolean newWindow)
+    void navigateReference(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull ResultSetModel bindingsModel,
+        @NotNull DBSEntityAssociation association,
+        @NotNull List<? extends DBDValueRow> rows,
+        boolean newWindow)
         throws DBException;
 
     int getHistoryPosition();
@@ -232,6 +276,7 @@ public interface IResultSetController extends IDataController, DBPContextProvide
 
     void lockActionsByFocus(Control lockedBy);
 
+    @NotNull
     IResultSetSelection getSelection();
 
     void addListener(IResultSetListener listener);
@@ -239,4 +284,26 @@ public interface IResultSetController extends IDataController, DBPContextProvide
     void removeListener(IResultSetListener listener);
 
     void updateDirtyFlag();
+
+    // TODO introduce value path here
+    boolean updateCellValue(
+        @NotNull DBDAttributeBinding attr,
+        @NotNull ResultSetRow row,
+        @Nullable int[] rowIndexes,
+        @Nullable Object value,
+        boolean refreshHints) throws DBException;
+
+    // TODO introduce value path here
+    void resetCellValue(
+        @NotNull DBDAttributeBinding attr,
+        @NotNull ResultSetRow row,
+        @Nullable int[] rowIndexes);
+
+    /**
+     * @param rowIndexes          applicable only when single row is passed
+     */
+    void refreshHintCache(
+        Collection<DBDAttributeBinding> attrs,
+        Collection<DBDValueRow> rows,
+        int[] rowIndexes);
 }

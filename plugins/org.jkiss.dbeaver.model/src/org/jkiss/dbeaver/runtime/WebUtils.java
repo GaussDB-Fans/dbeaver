@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
  */
 package org.jkiss.dbeaver.runtime;
 
+import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.osgi.util.NLS;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -30,6 +31,7 @@ import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.dbeaver.utils.RuntimeUtils;
 import org.jkiss.utils.ByteNumberFormat;
 import org.jkiss.utils.CommonUtils;
+import org.jkiss.utils.HttpConstants;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,9 +49,10 @@ import java.util.Map;
 public class WebUtils {
     private static final Log log = Log.getLog(WebUtils.class);
     private static final int MAX_RETRY_COUNT = 10;
+    private static final int DOWNLOAD_PROGRESS_MAX = 1000;
 
     @NotNull
-    public static URLConnection openConnection(String urlString, String referrer) throws IOException {
+    public static URLConnection openConnection(@NotNull String urlString, @Nullable String referrer) throws IOException {
         return openConnection(urlString, null, referrer);
     }
 
@@ -129,18 +132,18 @@ public class WebUtils {
             httpConnection.setInstanceFollowRedirects(true);
             HttpURLConnection.setFollowRedirects(true);
             connection.setRequestProperty(
-                "User-Agent",  //$NON-NLS-1$
+                HttpConstants.HEADER_USER_AGENT,  //$NON-NLS-1$
                 GeneralUtils.getProductTitle());
             if (referrer != null) {
                 connection.setRequestProperty(
-                        "X-Referrer",  //$NON-NLS-1$
+                    HttpConstants.HEADER_X_REFERRER,  //$NON-NLS-1$
                         referrer);
             }
             if (authInfo != null && !CommonUtils.isEmpty(authInfo.getUserName())) {
                 // Set auth info
                 String encoded = Base64.getEncoder().encodeToString(
                     (authInfo.getUserName() + ":" + CommonUtils.notEmpty(authInfo.getUserPassword())).getBytes(GeneralUtils.UTF8_CHARSET));
-                connection.setRequestProperty("Authorization", "Basic " + encoded);
+                connection.setRequestProperty(HttpConstants.HEADER_AUTHORIZATION, "Basic " + encoded);
             }
         }
         if (headers != null) {
@@ -184,6 +187,7 @@ public class WebUtils {
         Path localFile,
         DBPAuthInfo authInfo
     ) throws IOException, InterruptedException {
+        monitor.subTask("Download file '" + externalURL + "'");
         try (final OutputStream outputStream = Files.newOutputStream(localFile)) {
             return downloadRemoteFile(monitor, taskName, externalURL, outputStream, authInfo);
         }
@@ -198,15 +202,19 @@ public class WebUtils {
     ) throws IOException, InterruptedException {
         final URLConnection connection = openConnection(externalURL, authInfo, null);
         final int contentLength = connection.getContentLength();
-        final byte[] buffer = new byte[8192];
+        final byte[] buffer = new byte[8192 * 4];
         final NumberFormat numberFormat = new ByteNumberFormat(ByteNumberFormat.BinaryPrefix.ISO);
 
         // The value of getContentLength() may be -1 and this should not be handled, see IProgressMonitor#UNKNOWN
-        monitor.beginTask(taskName + " - " + externalURL, contentLength);
+        monitor.beginTask(
+            taskName + " - " + externalURL,
+            contentLength >= 0 ? DOWNLOAD_PROGRESS_MAX : IProgressMonitor.UNKNOWN
+        );
         try (final InputStream inputStream = connection.getInputStream()) {
             final long startTime = System.currentTimeMillis();
             long updateTime = 0;
             long totalRead = 0;
+            int reportedProgress = 0;
 
             while (true) {
                 if (monitor.isCanceled()) {
@@ -234,8 +242,15 @@ public class WebUtils {
                     return totalRead;
                 }
                 outputStream.write(buffer, 0, count);
-                monitor.worked(count);
                 totalRead += count;
+                if (contentLength > 0) {
+                    int progress = (int) Math.min(
+                        DOWNLOAD_PROGRESS_MAX,
+                        totalRead * DOWNLOAD_PROGRESS_MAX / contentLength
+                    );
+                    monitor.worked(progress - reportedProgress);
+                    reportedProgress = progress;
+                }
             }
         } finally {
             monitor.done();

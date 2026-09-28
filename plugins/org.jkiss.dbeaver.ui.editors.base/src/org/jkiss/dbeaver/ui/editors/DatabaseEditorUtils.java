@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,14 @@
 package org.jkiss.dbeaver.ui.editors;
 
 import org.eclipse.jface.action.IContributionManager;
+import org.eclipse.jface.action.ToolBarManager;
 import org.eclipse.swt.custom.CTabFolder;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IWorkbenchCommandConstants;
 import org.eclipse.ui.IWorkbenchSite;
+import org.eclipse.ui.internal.WorkbenchMessages;
 import org.jkiss.dbeaver.model.DBPContextProvider;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBPDataSourceContainerProvider;
@@ -30,7 +32,8 @@ import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.ui.ActionUtils;
 import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.UIUtils;
-import org.jkiss.dbeaver.ui.css.DBStyles;
+import org.jkiss.dbeaver.ui.controls.ToolbarSeparatorContribution;
+import org.jkiss.dbeaver.ui.css.CSSUtils;
 import org.jkiss.dbeaver.ui.editors.internal.EditorsMessages;
 
 /**
@@ -38,8 +41,8 @@ import org.jkiss.dbeaver.ui.editors.internal.EditorsMessages;
  */
 public class DatabaseEditorUtils {
 
-    public static void setPartBackground(IEditorPart editor, Composite composite)
-    {
+    // Associates editor with datasource
+    public static void setPartBackground(IEditorPart editor, Composite composite) {
         if (composite == null || composite.isDisposed()) {
             return;
         }
@@ -57,48 +60,57 @@ public class DatabaseEditorUtils {
         }
 
         DBPDataSourceContainer dsContainer = null;
-        if (editor instanceof DBPDataSourceContainerProvider) {
-            dsContainer = ((DBPDataSourceContainerProvider) editor).getDataSourceContainer();
-        } else if (editor instanceof DBPContextProvider) {
-            DBCExecutionContext context = ((DBPContextProvider) editor).getExecutionContext();
+        if (editor instanceof DBPDataSourceContainerProvider dscp) {
+            dsContainer = dscp.getDataSourceContainer();
+        } else if (editor instanceof DBPContextProvider cp) {
+            DBCExecutionContext context = cp.getExecutionContext();
             if (context != null) {
                 dsContainer = context.getDataSource().getContainer();
             }
         }
 
         if (dsContainer == null) {
+            rootComposite.setData(CSSUtils.DATABASE_EDITOR_COMPOSITE_DATASOURCE, null);
             rootComposite.setBackground(null);
         } else {
             Color bgColor = UIUtils.getConnectionColor(dsContainer.getConnectionConfiguration());
 
-            rootComposite.setData(DBStyles.DATABASE_EDITOR_COMPOSITE_DATASOURCE, dsContainer);
+            rootComposite.setData(CSSUtils.DATABASE_EDITOR_COMPOSITE_DATASOURCE, dsContainer);
             rootComposite.setBackground(bgColor);
         }
     }
 
-    public static void contributeStandardEditorActions(IWorkbenchSite workbenchSite, IContributionManager contributionManager)
-    {
+    public static void contributeStandardEditorActions(IWorkbenchSite workbenchSite, IContributionManager contributionManager) {
         contributionManager.add(ActionUtils.makeCommandContribution(
             workbenchSite,
             IWorkbenchCommandConstants.FILE_REFRESH,
             EditorsMessages.database_editor_command_refresh_name,
             UIIcon.REFRESH,
             EditorsMessages.database_editor_command_refresh_tip,
-            true));
+            true
+        ));
+        if (contributionManager instanceof ToolBarManager) {
+            contributionManager.add(new ToolbarSeparatorContribution(true));
+        }
         contributionManager.add(ActionUtils.makeCommandContribution(
             workbenchSite,
             IWorkbenchCommandConstants.FILE_SAVE,
-            EditorsMessages.database_editor_command_save_name,
+            WorkbenchMessages.Save,
             UIIcon.SAVE,
             EditorsMessages.database_editor_command_save_tip,
-            true));
+            true
+        ));
         contributionManager.add(ActionUtils.makeCommandContribution(
             workbenchSite,
             IWorkbenchCommandConstants.FILE_REVERT,
-            EditorsMessages.database_editor_command_revert_name,
+            WorkbenchMessages.Workbench_revert,
             UIIcon.RESET,
             EditorsMessages.database_editor_command_revert_tip,
-            true));
+            true
+        ));
+        if (contributionManager instanceof ToolBarManager) {
+            contributionManager.add(new ToolbarSeparatorContribution(true));
+        }
     }
 
 }

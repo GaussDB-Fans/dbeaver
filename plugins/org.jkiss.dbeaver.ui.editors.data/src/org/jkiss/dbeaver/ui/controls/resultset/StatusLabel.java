@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@ package org.jkiss.dbeaver.ui.controls.resultset;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
@@ -32,11 +31,11 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBIcon;
 import org.jkiss.dbeaver.model.DBPMessageType;
 import org.jkiss.dbeaver.model.data.DBDDataReceiver;
+import org.jkiss.dbeaver.ui.ConComposite;
 import org.jkiss.dbeaver.ui.DBeaverIcons;
 import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.css.CSSUtils;
-import org.jkiss.dbeaver.ui.css.DBStyles;
 import org.jkiss.dbeaver.ui.editors.TextEditorUtils;
 import org.jkiss.utils.CommonUtils;
 
@@ -46,16 +45,15 @@ import java.util.List;
 /**
  * Status label
  */
-class StatusLabel extends Composite {
+class StatusLabel extends ConComposite {
 
     private final IResultSetController viewer;
     private final Label statusText;
-    //private final Color colorDefault, colorError, colorWarning;
     private DBPMessageType messageType;
     private final ToolItem detailsIcon;
 
     public StatusLabel(@NotNull Composite parent, int style, @Nullable final IResultSetController viewer) {
-        super(parent, SWT.NONE);
+        super(parent);
         this.viewer = viewer;
 
         final GridLayout layout = new GridLayout(3, false);
@@ -64,30 +62,16 @@ class StatusLabel extends Composite {
         layout.horizontalSpacing = 3;
         setLayout(layout);
 
-/*
-        colorDefault = getForeground();
-        colorError = JFaceColors.getErrorText(Display.getDefault());
-        colorWarning = colorDefault;
-*/
         final ToolBar tb = new ToolBar(this, SWT.FLAT | SWT.HORIZONTAL);
-        CSSUtils.setCSSClass(tb, DBStyles.COLORED_BY_CONNECTION_TYPE);
+
         detailsIcon = new ToolItem(tb, SWT.NONE);
         detailsIcon.setImage(DBeaverIcons.getImage(UIIcon.DOTS_BUTTON));
         tb.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_BEGINNING));
 
-        detailsIcon.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                showDetails();
-            }
-        });
+        detailsIcon.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> showDetails()));
 
         statusText = new Label(this, SWT.NONE);
-//        if (RuntimeUtils.isPlatformWindows()) {
-//            statusText.setBackground(null);
-//        } else {
-//            statusText.setBackground(parent.getBackground());
-//        }
+        CSSUtils.markConnectionTypeColor(statusText);
         GridData gd = new GridData(GridData.FILL_HORIZONTAL);
         statusText.setLayoutData(gd);
         statusText.addMouseListener(new MouseAdapter() {
@@ -105,8 +89,7 @@ class StatusLabel extends Composite {
 
     protected void showDetails() {
         DBDDataReceiver dataReceiver = viewer.getDataReceiver();
-        if (dataReceiver instanceof ResultSetDataReceiver) {
-            ResultSetDataReceiver rsdr = (ResultSetDataReceiver) dataReceiver;
+        if (dataReceiver instanceof ResultSetDataReceiver rsdr) {
             List<Throwable> errorList = rsdr.getErrorList();
             if (errorList.isEmpty()) {
                 if (viewer.getModel().getStatistics() != null && viewer.getModel().getStatistics().getError() != null) {
@@ -116,7 +99,8 @@ class StatusLabel extends Composite {
             StatusDetailsDialog dialog = new StatusDetailsDialog(
                 viewer.getSite().getShell(),
                 getMessage(),
-                errorList);
+                errorList
+            );
             dialog.open();
         }
     }
@@ -129,26 +113,17 @@ class StatusLabel extends Composite {
         this.statusText.setToolTipText(message);
     }
 
-    public void setStatus(String message, DBPMessageType messageType)
-    {
+    public void setStatus(String message, DBPMessageType messageType) {
         if (statusText.isDisposed()) {
             return;
         }
         this.messageType = messageType;
 
-        //Color fg;
-        DBIcon statusIcon = null;
-        switch (messageType) {
-            case ERROR:
-                //fg = colorError;
-                statusIcon = DBIcon.SMALL_ERROR;
-                break;
-            case WARNING:
-                //fg = colorWarning;
-                statusIcon = DBIcon.SMALL_WARNING;
-                break;
-        }
-        //statusText.setForeground(fg);
+        DBIcon statusIcon = switch (messageType) {
+            case ERROR -> DBIcon.SMALL_ERROR;
+            case WARNING -> DBIcon.SMALL_WARNING;
+            default -> null;
+        };
 
         if (message == null) {
             message = "???"; //$NON-NLS-1$

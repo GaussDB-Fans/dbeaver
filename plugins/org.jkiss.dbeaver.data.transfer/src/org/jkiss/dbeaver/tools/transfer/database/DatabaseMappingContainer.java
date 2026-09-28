@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import net.sf.jsqlparser.statement.select.Select;
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.osgi.util.NLS;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBIcon;
@@ -54,13 +55,14 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
     private static final Log log = Log.getLog(DatabaseMappingContainer.class);
 
     private final DatabaseConsumerSettings consumerSettings;
-    private DBSDataContainer source;
+    private final DBSDataContainer source;
     private DBSDataManipulator target;
     private String targetName;
     private DatabaseMappingType mappingType;
     private final List<DatabaseMappingAttribute> attributeMappings = new ArrayList<>();
     private Map<DBPPropertyDescriptor, Object> changedPropertiesMap;
     private Map<String, Object> rawChangedPropertiesMap; // For tasks with empty container
+    private Object extraMappingState;
 
     public DatabaseMappingContainer(DatabaseConsumerSettings consumerSettings, DBSDataContainer source) {
         this.consumerSettings = consumerSettings;
@@ -90,6 +92,7 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         return consumerSettings;
     }
 
+    @Nullable
     @Override
     public DBSDataManipulator getTarget() {
         return target;
@@ -100,6 +103,7 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         this.targetName = null;
     }
 
+    @NotNull
     @Override
     public DatabaseMappingType getMappingType() {
         return mappingType;
@@ -148,11 +152,13 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         return true;
     }
 
+    @NotNull
     @Override
     public DBPImage getIcon() {
         return DBIcon.TREE_TABLE;
     }
 
+    @Nullable
     @Override
     public DBSDataContainer getSource() {
         return source;
@@ -170,6 +176,7 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         return rawChangedPropertiesMap;
     }
 
+    @NotNull
     @Override
     public String getTargetName() {
         String targetTableName = targetName;
@@ -179,16 +186,14 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
             } else {
                 DBSDataContainer theSource = this.source;
                 if (theSource != null) {
-                    if (theSource instanceof IAdaptable) {
-                        DBSDataContainer adapterSource = ((IAdaptable) theSource).getAdapter(DBSDataContainer.class);
+                    if (theSource instanceof IAdaptable adaptable) {
+                        DBSDataContainer adapterSource = adaptable.getAdapter(DBSDataContainer.class);
                         if (adapterSource != null) {
                             theSource = adapterSource;
                         }
                     }
-                    if (theSource instanceof SQLQueryContainer) {
-                        final SQLQueryContainer sqlQueryContainer = (SQLQueryContainer) theSource;
-                        if (sqlQueryContainer.getQuery() instanceof SQLQuery) {
-                            final SQLQuery sqlQuery = (SQLQuery) sqlQueryContainer.getQuery();
+                    if (theSource instanceof SQLQueryContainer sqlQueryContainer) {
+                        if (sqlQueryContainer.getQuery() instanceof SQLQuery sqlQuery) {
                             if (sqlQuery.getStatement() instanceof Select) {
                                 final Table table = SQLSemanticProcessor.getTableFromSelect((Select) sqlQuery.getStatement());
                                 if (table != null) {
@@ -205,35 +210,51 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
                 }
             }
         }
-        switch (mappingType) {
-            case existing:
-            case recreate:
+        return switch (mappingType) {
+            case existing, recreate -> {
                 if (target != null) {
-                    return target.getName();
+                    yield target.getName();
                 }
-                return targetTableName;
-            case skip:
-                return DatabaseMappingAttribute.TARGET_NAME_SKIP;
-            case create:
-            default:
-                return targetTableName;
-        }
+                yield targetTableName;
+            }
+            case skip -> DatabaseMappingAttribute.TARGET_NAME_SKIP;
+            default -> targetTableName;
+        };
     }
 
-    public void setTargetName(String targetName) {
+    public void setTargetName(@NotNull String targetName) {
         this.targetName = targetName;
     }
 
+    @Nullable
+    public Object getExtraMappingState() {
+        return extraMappingState;
+    }
+
+    public void setExtraMappingState(@Nullable Object extraMappingState) {
+        this.extraMappingState = extraMappingState;
+    }
+
+
+    @Nullable
     DatabaseMappingAttribute getAttributeMapping(@NotNull DBDAttributeBinding sourceAttr) {
+        return getAttributeMapping((DBSAttributeBase) sourceAttr);
+    }
+
+    @Nullable
+    public DatabaseMappingAttribute getAttributeMapping(@NotNull DBSAttributeBase sourceAttr) {
         return CommonUtils.findBestCaseAwareMatch(
             attributeMappings,
-            CommonUtils.notNull(sourceAttr.getLabel(), sourceAttr.getName()),
+            sourceAttr instanceof DBDAttributeBinding binding
+                ? CommonUtils.notNull(binding.getLabel(), binding.getName())
+                : sourceAttr.getName(),
             attr -> attr.getSourceLabelOrName(attr.getSource(), false, false));
     }
 
     /**
      * Returns attribute mappings collection without a monitor
      */
+    @NotNull
     public Collection<DatabaseMappingAttribute> getAttributeMappings() {
         if (attributeMappings.isEmpty()) {
             try {
@@ -247,19 +268,24 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         return attributeMappings;
     }
 
-    public Collection<DatabaseMappingAttribute> getAttributeMappings(DBRProgressMonitor monitor) {
+    @NotNull
+    public Collection<DatabaseMappingAttribute> getAttributeMappings(@NotNull DBRProgressMonitor monitor) {
         if (attributeMappings.isEmpty()) {
             try {
                 readAttributes(monitor);
             } catch (DBException e) {
-                DBWorkbench.getPlatformUI().showError(DTMessages.database_mapping_container_title_attributes_read_failed,
-                        NLS.bind(DTMessages.database_mapping_container_message_get_attributes_from, DBUtils.getObjectFullName(source, DBPEvaluationContext.UI)), e);
+                DBWorkbench.getPlatformUI().showError(
+                    DTMessages.database_mapping_container_title_attributes_read_failed,
+                    NLS.bind(
+                        DTMessages.database_mapping_container_message_get_attributes_from,
+                        DBUtils.getObjectFullName(source, DBPEvaluationContext.UI)),
+                    e);
             }
         }
         return attributeMappings;
     }
 
-    private void readAttributes(DBRProgressMonitor monitor) throws DBException {
+    private void readAttributes(@NotNull DBRProgressMonitor monitor) throws DBException {
         for (DBSAttributeBase attr : DTUtils.getAttributes(monitor, source, this)) {
             addAttributeMapping(monitor, attr);
         }
@@ -271,7 +297,8 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         attributeMappings.add(mapping);
     }
 
-    public void saveSettings(Map<String, Object> settings) {
+
+    public void saveSettings(@NotNull Map<String, Object> settings) {
         if (!CommonUtils.isEmpty(targetName)) {
             settings.put("targetName", targetName);
         } else if (target != null) {
@@ -303,6 +330,7 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
             // In case then we have only the raw map of changed container properties
             settings.put("changedProperties", rawChangedPropertiesMap);
         }
+        consumerSettings.saveContainerExtraSettings(this, settings);
     }
 
     public void loadSettings(DBRRunnableContext context, Map<String, Object> settings) {
@@ -349,6 +377,7 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
             }
         }
         rawChangedPropertiesMap = JSONUtils.getObject(settings, "changedProperties");
+        consumerSettings.loadContainerExtraSettings(this, settings);
     }
 
     public boolean isSameMapping(DatabaseMappingContainer mapping) {
@@ -376,6 +405,6 @@ public class DatabaseMappingContainer implements DatabaseMappingObject {
         if (container instanceof DBSSchema || container instanceof DBSCatalog) {
             return DBUtils.getObjectFullName(container, DBPEvaluationContext.DML) + "." + targetName;
         }
-        return targetName;
+        return getTargetName();
     }
 }

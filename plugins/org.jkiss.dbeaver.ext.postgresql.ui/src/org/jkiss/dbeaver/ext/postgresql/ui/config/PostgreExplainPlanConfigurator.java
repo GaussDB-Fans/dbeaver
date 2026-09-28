@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2019 Andrew Khitrin (ahitrin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +19,10 @@ package org.jkiss.dbeaver.ext.postgresql.ui.config;
 
 
 import org.eclipse.jface.dialogs.IDialogConstants;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Group;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.ext.postgresql.PostgreMessages;
@@ -57,6 +54,7 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
 
     private static PostgreDataSource dataSource;
 
+    @NotNull
     @Override
     public DBCQueryPlannerConfiguration configureObject(@NotNull DBRProgressMonitor monitor, @Nullable DBECommandContext commandContext, @Nullable Object container, @NotNull DBCQueryPlannerConfiguration configuration, @NotNull Map<String, Object> options) {
         if (container instanceof DBCQueryPlanner) {
@@ -110,26 +108,24 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
             super(UIUtils.getActiveWorkbenchShell(), PostgreMessages.dialog_query_planner_settings_title, null);
         }
 
+        @NotNull
         @Override
-        protected Composite createDialogArea(Composite parent) {
+        protected Composite createDialogArea(@NotNull Composite parent) {
             Composite dialogArea = super.createDialogArea(parent);
             boolean isServerAtLeast13 = dataSource != null && dataSource.isServerVersionAtLeast(13, 0);
             boolean isServerAtLeast9 = dataSource != null && dataSource.isServerVersionAtLeast(9, 0);
-            Group settingsGroup = UIUtils.createControlGroup(
+            Composite settingsGroup = UIUtils.createTitledComposite(
                 dialogArea,
                 PostgreMessages.dialog_query_planner_settings_control_label,
                 2,
-                GridData.FILL_BOTH,
-                0);
+                GridData.FILL_BOTH);
             Button analyseCheckbox = UIUtils.createCheckbox(
                 settingsGroup,
                 PostgreMessages.dialog_query_planner_settings_analyze,
                 PostgreMessages.dialog_query_planner_settings_analyze_tip,
                 analyse,
                 2);
-            analyseCheckbox.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            analyseCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     boolean analyseCheckboxSelection = analyseCheckbox.getSelection();
                     analyse = analyseCheckbox.getSelection();
                     if (walCheckbox != null) {
@@ -159,8 +155,7 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                             buffers = false;
                         }
                     }
-                }
-            });
+                }));
 
             Button verboseCheckbox = UIUtils.createCheckbox(
                 settingsGroup,
@@ -168,12 +163,7 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                 PostgreMessages.dialog_query_planner_settings_verbose_tip,
                 verbose,
                 2);
-            verboseCheckbox.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    verbose = verboseCheckbox.getSelection();
-                }
-            });
+            verboseCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> verbose = verboseCheckbox.getSelection()));
 
             if (isServerAtLeast9) {
                 Button costsCheckbox = UIUtils.createCheckbox(
@@ -182,12 +172,7 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                     PostgreMessages.dialog_query_planner_settings_costs_tip,
                     costs,
                     2);
-                costsCheckbox.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        costs = costsCheckbox.getSelection();
-                    }
-                });
+                costsCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> costs = costsCheckbox.getSelection()));
             }
 
             if (isVersionSupports(12, 0)) {
@@ -197,12 +182,8 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                     PostgreMessages.dialog_query_planner_settings_tip,
                     settings,
                     2);
-                settingsCheckbox.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        settings = settingsCheckbox.getSelection();
-                    }
-                });
+                settingsCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+                    settings = settingsCheckbox.getSelection()));
             }
 
             if (isServerAtLeast9) {
@@ -212,12 +193,8 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                     PostgreMessages.dialog_query_planner_settings_buffers_tip,
                     buffers,
                     2);
-                buffersCheckbox.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        buffers = buffersCheckbox.getSelection();
-                    }
-                });
+                buffersCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+                    buffers = buffersCheckbox.getSelection()));
                 if (!isServerAtLeast13) {
                     buffersCheckbox.setEnabled(analyseCheckbox.getSelection());
                 }
@@ -230,12 +207,7 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                     PostgreMessages.dialog_query_planner_settings_wal_tip,
                     wal,
                     2);
-                walCheckbox.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        wal = walCheckbox.getSelection();
-                    }
-                });
+                walCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> wal = walCheckbox.getSelection()));
                 walCheckbox.setEnabled(analyseCheckbox.getSelection());
             }
 
@@ -246,12 +218,7 @@ public class PostgreExplainPlanConfigurator implements DBEObjectConfigurator<DBC
                     PostgreMessages.dialog_query_planner_settings_timing_tip,
                     timing,
                     2);
-                timingCheckbox.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        timing = timingCheckbox.getSelection();
-                    }
-                });
+                timingCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> timing = timingCheckbox.getSelection()));
                 timingCheckbox.setEnabled(analyseCheckbox.getSelection());
             }
 

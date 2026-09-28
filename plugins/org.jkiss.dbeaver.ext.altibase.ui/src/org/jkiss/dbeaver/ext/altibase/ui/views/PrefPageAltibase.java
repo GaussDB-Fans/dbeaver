@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,10 @@
 package org.jkiss.dbeaver.ext.altibase.ui.views;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ext.altibase.AltibaseConstants;
 import org.jkiss.dbeaver.ext.altibase.ui.internal.AltibaseUIMessages;
@@ -56,13 +55,17 @@ public class PrefPageAltibase extends TargetPrefPage {
                 store.contains(AltibaseConstants.PREF_PLAN_PREFIX));
     }
 
+    @NotNull
     @Override
     protected Control createPreferenceContent(Composite parent) {
-        Composite composite = UIUtils.createPlaceholder(parent, 1);
+        Composite composite = UIUtils.createComposite(parent, 1);
 
         // Explain plan
-        Group planGroup = UIUtils.createControlGroup(composite, 
-                AltibaseUIMessages.pref_page_altibase_explain_plan_legend, 1, GridData.FILL_HORIZONTAL, 0);
+        Composite planGroup = UIUtils.createTitledComposite(
+            composite,
+            AltibaseUIMessages.pref_page_altibase_explain_plan_legend,
+            1,
+            GridData.FILL_HORIZONTAL);
 
         /* Description */
         Label descLabel = new Label(planGroup, SWT.WRAP);
@@ -74,19 +77,14 @@ public class PrefPageAltibase extends TargetPrefPage {
         int i = 0;
         int size = AltibaseConstants.ExplainPlan.values().length;
         planTypeBtns = new Button[size];
-        
-        SelectionListener selectionListener = new SelectionAdapter() {
-            
-            @Override
-            public void widgetSelected(final SelectionEvent e) {
-                super.widgetSelected(e);
-                for (int i = 0; i < size; i++) {
-                    if (planTypeBtns[i] != null && planTypeBtns[i].getSelection()) {
-                        planTypeIdx = i;
-                    }
+
+        SelectionListener selectionListener = SelectionListener.widgetSelectedAdapter(e -> {
+            for (int buttonIndex = 0; buttonIndex < size; buttonIndex++) {
+                if (planTypeBtns[buttonIndex] != null && planTypeBtns[buttonIndex].getSelection()) {
+                    planTypeIdx = buttonIndex;
                 }
             }
-        };
+        });
 
         /*
          * Explain plains (Execution plan)
@@ -98,8 +96,11 @@ public class PrefPageAltibase extends TargetPrefPage {
         
         // Misc.
         {
-            Group miscGroup = UIUtils.createControlGroup(
-                    composite, AltibaseUIMessages.pref_page_altibase_legend_misc, 1, GridData.FILL_HORIZONTAL, 0);
+            Composite miscGroup = UIUtils.createTitledComposite(
+                composite,
+                AltibaseUIMessages.pref_page_altibase_legend_misc,
+                1,
+                GridData.FILL_HORIZONTAL);
             enableDbmsOutputCheck = UIUtils.createCheckbox(
                     miscGroup, AltibaseUIMessages.pref_page_altibase_checkbox_enable_dbms_output, true);
             enablePlanPrefixDepthCheck = UIUtils.createCheckbox(

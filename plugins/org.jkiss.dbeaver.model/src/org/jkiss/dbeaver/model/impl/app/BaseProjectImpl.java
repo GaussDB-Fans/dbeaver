@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import org.eclipse.core.runtime.Status;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.DBRuntimeException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.app.DBPProject;
@@ -44,8 +45,6 @@ import org.jkiss.dbeaver.utils.ContentUtils;
 import org.jkiss.dbeaver.utils.RuntimeUtils;
 import org.jkiss.utils.CommonUtils;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -54,6 +53,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
@@ -62,6 +63,23 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
     public static final String SETTINGS_STORAGE_FILE = "project-settings.json";
     public static final String METADATA_STORAGE_FILE = "project-metadata.json";
     public static final String PROP_PROJECT_ID = "id";
+    public static final String PROP_PROJECT_NAME = "name";
+    public static final String PROP_PROJECT_DESCRIPTION = "description";
+    public static final String PROJECT_FILE = ".project";
+
+    private static final String EMPTY_PROJECT_TEMPLATE = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <projectDescription>
+        <name>${project-name}</name>
+        <comment></comment>
+        <projects>
+        </projects>
+        <buildSpec>
+        </buildSpec>
+        <natures>
+            <nature>org.jkiss.dbeaver.DBeaverNature</nature>
+        </natures>
+        </projectDescription>""";
 
     public enum ProjectFormat {
         UNKNOWN,    // Project is not open or corrupted
@@ -86,9 +104,10 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
     private volatile DBFFileSystemManager fileSystemManager;
     private volatile Map<String, String> runtimeProperties = new ConcurrentHashMap<>();
     private volatile Map<String, Object> properties;
-    protected volatile Map<String, Map<String, Object>> resourceProperties;
+    protected volatile Map<String, Map<String, String>> resourceProperties;
     private UUID projectID;
 
+    private final Object propertiesSync = new Object();
     protected final Object metadataSync = new Object();
     protected final Object resourcesSync = new Object();
     private ProjectSyncJob metadataSyncJob;
@@ -114,9 +133,23 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
         return getName();
     }
 
+    @Nullable
+    @Override
+    public String getDescription() {
+        Object projectDescription = this.getProjectProperty(PROP_PROJECT_DESCRIPTION);
+        if (projectDescription != null) {
+            return projectDescription.toString();
+        }
+        return null;
+    }
+
     @NotNull
     @Override
     public String getDisplayName() {
+        Object projectName = this.getProjectProperty(PROP_PROJECT_NAME);
+        if (projectName != null) {
+            return projectName.toString();
+        }
         return getName();
     }
 
@@ -191,6 +224,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
                         ensureOpen();
                         if (dataSourceRegistry == null) {
                             dataSourceRegistry = createDataSourceRegistry();
+                            dataSourceRegistry.initializeDataSources();
                         }
                     }
                 }
@@ -201,6 +235,9 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
                 registryOpener.run();
             } else {
                 RuntimeUtils.runTask(monitor -> registryOpener.run(), "Load registry", 0);
+            }
+            if (dataSourceRegistry == null) {
+                throw new DBRuntimeException("Internal error - datasource registry is null after init");
             }
         }
         return dataSourceRegistry;
@@ -253,7 +290,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
     @Nullable
     @Override
     public Object getProjectProperty(String propName) {
-        synchronized (this) {
+        synchronized (propertiesSync) {
             loadProperties();
             return properties.get(propName);
         }
@@ -261,7 +298,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
     @Override
     public void setProjectProperty(@NotNull String propName, @Nullable Object propValue) {
-        synchronized (metadataSync) {
+        synchronized (propertiesSync) {
             loadProperties();
             if (propValue == null) {
                 properties.remove(propName);
@@ -272,7 +309,15 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
         }
     }
 
-    private void loadProperties() {
+    public void setProjectProperties(@NotNull Map<String, Object> properties) {
+        synchronized (propertiesSync) {
+            loadProperties();
+            this.properties.putAll(properties);
+            saveProperties();
+        }
+    }
+
+    protected void loadProperties() {
         if (properties != null) {
             return;
         }
@@ -281,7 +326,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
             return;
         }
 
-        synchronized (metadataSync) {
+        synchronized (propertiesSync) {
             Path settingsFile = getMetadataPath().resolve(SETTINGS_STORAGE_FILE);
 
             if (fileExistsAndNonEmpty(settingsFile)) {
@@ -323,7 +368,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
     @NotNull
     @Override
-    public String[] findResources(@NotNull Map<String, ?> properties) throws DBException {
+    public String[] findResources(@NotNull Map<String, String> properties) throws DBException {
         loadMetadata();
 
         synchronized (resourcesSync) {
@@ -331,10 +376,10 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
             for (var resource : resourceProperties.entrySet()) {
                 boolean containsRequiredProperties = true;
-                final Map<String, Object> props = resource.getValue();
+                final Map<String, String> props = resource.getValue();
                 for (var property : properties.entrySet()) {
                     final String propName = property.getKey();
-                    final Object propValue = property.getValue();
+                    final String propValue = property.getValue();
 
                     if (!props.containsKey(propName) || !Objects.equals(props.get(propName), propValue)) {
                         containsRequiredProperties = false;
@@ -352,11 +397,11 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
     @Nullable
     @Override
-    public Object getResourceProperty(@NotNull String resourcePath, @NotNull String propName) {
+    public String getResourceProperty(@NotNull String resourcePath, @NotNull String propName) {
         loadMetadata();
         resourcePath = CommonUtils.normalizeResourcePath(resourcePath);
         synchronized (resourcesSync) {
-            Map<String, Object> resProps = resourceProperties.get(resourcePath);
+            Map<String, String> resProps = resourceProperties.get(resourcePath);
             if (resProps != null) {
                 return resProps.get(propName);
             }
@@ -366,7 +411,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
     @Nullable
     @Override
-    public Map<String, Object> getResourceProperties(@NotNull String resourcePath) {
+    public Map<String, String> getResourceProperties(@NotNull String resourcePath) {
         loadMetadata();
         resourcePath = CommonUtils.normalizeResourcePath(resourcePath);
         synchronized (resourcesSync) {
@@ -375,7 +420,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
     }
 
     @Override
-    public void setResourceProperties(@NotNull String resourcePath, @NotNull Map<String, Object> newProps) {
+    public void setResourceProperties(@NotNull String resourcePath, @NotNull Map<String, String> newProps) {
         loadMetadata();
         resourcePath = CommonUtils.normalizeResourcePath(resourcePath);
         synchronized (resourcesSync) {
@@ -385,11 +430,11 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
     }
 
     @Override
-    public void setResourceProperty(@NotNull String resourcePath, @NotNull String propName, @Nullable Object propValue) {
+    public void setResourceProperty(@NotNull String resourcePath, @NotNull String propName, @Nullable String propValue) {
         loadMetadata();
         resourcePath = CommonUtils.normalizeResourcePath(resourcePath);
         synchronized (resourcesSync) {
-            Map<String, Object> resProps = resourceProperties.get(resourcePath);
+            Map<String, String> resProps = resourceProperties.get(resourcePath);
             if (resProps == null) {
                 if (propValue == null) {
                     // No props + no new value - ignore
@@ -424,7 +469,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
         oldResourcePath = CommonUtils.normalizeResourcePath(oldResourcePath);
         newResourcePath = CommonUtils.normalizeResourcePath(newResourcePath);
         synchronized (resourcesSync) {
-            Map<String, Object> resProps = resourceProperties.remove(oldResourcePath);
+            Map<String, String> resProps = resourceProperties.remove(oldResourcePath);
             if (resProps != null) {
                 resourceProperties.put(newResourcePath, resProps);
             }
@@ -433,8 +478,50 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
     }
 
     @Override
-    public void refreshProject(DBRProgressMonitor monitor) {
+    public void refreshProject() {
+        synchronized (propertiesSync) {
+            properties = null;
+        }
+    }
 
+    /**
+     * Replace project name in .project file
+     * @param projectPath path to project folder
+     * @param name project name
+     */
+    public static void updateProjectFile(@NotNull Path projectPath, @NotNull String name) throws IOException {
+        Path projectFile = projectPath.resolve(PROJECT_FILE);
+        if (Files.exists(projectFile)) {
+            String content = Files.readString(projectFile);
+            if (content.contains("<name>") && content.contains("</name>")) {
+                int start = content.indexOf("<name>");
+                int end = content.indexOf("</name>", start);
+                if (start != -1 && end != -1) {
+                    String newContent = content.substring(0, start + 6) + name + content.substring(end);
+                    if (!content.equals(newContent)) {
+                        Files.writeString(projectFile, newContent);
+                    }
+                    return;
+                }
+            }
+        }
+        Files.writeString(projectFile, EMPTY_PROJECT_TEMPLATE.replace("${project-name}", name));
+    }
+
+    public static boolean isHiddenProjectName(@NotNull String name) {
+        return name.startsWith(".");
+    }
+
+    @Override
+    public void updateProject(@Nullable String newName, @Nullable String description) throws DBException {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        if (CommonUtils.isNotEmpty(newName)) {
+            properties.put(PROP_PROJECT_NAME, newName);
+        }
+        if (description != null) {
+            properties.put(PROP_PROJECT_DESCRIPTION, CommonUtils.notEmpty(description));
+        }
+        setProjectProperties(properties);
     }
 
     public boolean resetResourceProperties(@NotNull String resourcePath) {
@@ -450,7 +537,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
         return hadProperties;
     }
 
-    protected void setResourceProperties(Map<String, Map<String, Object>> resourceProperties) {
+    protected void setResourceProperties(Map<String, Map<String, String>> resourceProperties) {
         synchronized (resourcesSync) {
             this.resourceProperties = resourceProperties;
         }
@@ -504,7 +591,7 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
             Path mdFile = getMetadataPath().resolve(METADATA_STORAGE_FILE);
             if (fileExistsAndNonEmpty(mdFile)) {
                 // Parse metadata
-                Map<String, Map<String, Object>> mdCache = new TreeMap<>();
+                Map<String, Map<String, String>> mdCache = new TreeMap<>();
                 try (Reader mdReader = Files.newBufferedReader(mdFile, StandardCharsets.UTF_8)) {
                     try (JsonReader jsonReader = METADATA_GSON.newJsonReader(mdReader)) {
                         jsonReader.beginObject();
@@ -515,16 +602,11 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
 
                                 while (jsonReader.hasNext()) {
                                     String resourceName = jsonReader.nextName();
-                                    Map<String, Object> resProperties = new HashMap<>();
+                                    Map<String, String> resProperties = new HashMap<>();
                                     jsonReader.beginObject();
                                     while (jsonReader.hasNext()) {
                                         String propName = jsonReader.nextName();
-                                        Object propValue = switch (jsonReader.peek()) {
-                                            case NUMBER -> jsonReader.nextDouble();
-                                            case BOOLEAN -> jsonReader.nextBoolean();
-                                            case NULL -> null;
-                                            default -> jsonReader.nextString();
-                                        };
+                                        String propValue = jsonReader.nextString();
                                         resProperties.put(propName, propValue);
                                     }
                                     jsonReader.endObject();
@@ -587,8 +669,9 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
             super("Project metadata sync");
         }
 
+        @NotNull
         @Override
-        protected IStatus run(DBRProgressMonitor monitor) {
+        protected IStatus run(@NotNull DBRProgressMonitor monitor) {
             setName("Project '" + BaseProjectImpl.this.getName() + "' sync job");
 
             ContentUtils.makeFileBackup(getMetadataFolder(false).resolve(METADATA_STORAGE_FILE));
@@ -609,19 +692,10 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
                     for (var resEntry : resourceProperties.entrySet()) {
                         jsonWriter.name(resEntry.getKey());
                         jsonWriter.beginObject();
-                        Map<String, Object> resProps = resEntry.getValue();
+                        Map<String, String> resProps = resEntry.getValue();
                         for (var propEntry : resProps.entrySet()) {
                             jsonWriter.name(propEntry.getKey());
-                            Object value = propEntry.getValue();
-                            if (value == null) {
-                                jsonWriter.nullValue();
-                            } else if (value instanceof Number) {
-                                jsonWriter.value((Number) value);
-                            } else if (value instanceof Boolean) {
-                                jsonWriter.value((Boolean) value);
-                            } else {
-                                jsonWriter.value(CommonUtils.toString(value));
-                            }
+                            jsonWriter.value(propEntry.getValue());
                         }
                         jsonWriter.endObject();
                     }
@@ -638,9 +712,10 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
         }
     }
 
-    @Nullable
+    @NotNull
     @Override
     public DBNModel getNavigatorModel() {
+        // FIXME: It mustn't return null actually
         return null;
     }
 
@@ -661,4 +736,10 @@ public abstract class BaseProjectImpl implements DBPProject, DBSSecretSubject {
         return fileNotEmpty;
     }
 
+    // Called by model itself when some project-dependent entities change their state
+    // E.g. when we save/load datasource registry
+    // By default does nothing
+    public void updateProjectNature() {
+
+    }
 }

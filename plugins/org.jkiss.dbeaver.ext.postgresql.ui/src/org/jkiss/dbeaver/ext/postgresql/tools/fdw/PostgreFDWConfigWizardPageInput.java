@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,10 @@
 package org.jkiss.dbeaver.ext.postgresql.tools.fdw;
 
 import org.eclipse.jface.dialogs.IDialogConstants;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Group;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.navigator.*;
 import org.jkiss.dbeaver.model.struct.DBSEntity;
@@ -62,7 +60,7 @@ class PostgreFDWConfigWizardPageInput extends ActiveWizardPage<PostgreFDWConfigW
         Composite composite = UIUtils.createComposite(parent, 1);
 
         {
-            Group databasesGroup = UIUtils.createControlGroup(composite, "Foreign databases", 1, GridData.FILL_BOTH, 0);
+            Composite databasesGroup = UIUtils.createTitledComposite(composite, "Foreign databases", 1, GridData.FILL_BOTH);
 
             selectorPanel = new DatabaseObjectsSelectorPanel(
                 databasesGroup,
@@ -97,9 +95,7 @@ class PostgreFDWConfigWizardPageInput extends ActiveWizardPage<PostgreFDWConfigW
             };
 
             Composite buttonsPanel = UIUtils.createComposite(databasesGroup, 2);
-            UIUtils.createDialogButton(buttonsPanel, "Add database", new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            UIUtils.createDialogButton(buttonsPanel, "Add database", SelectionListener.widgetSelectedAdapter(e -> {
                     SelectDataSourceDialog dialog = new SelectDataSourceDialog(getShell(), selectorPanel.getProject(), null);
                     if (dialog.open() == IDialogConstants.OK_ID) {
                         DBPDataSourceContainer dataSource = dialog.getDataSource();
@@ -108,19 +104,15 @@ class PostgreFDWConfigWizardPageInput extends ActiveWizardPage<PostgreFDWConfigW
                             refreshDataSources();
                         }
                     }
-                }
-            });
+                }));
 
-            Button delButton = UIUtils.createDialogButton(buttonsPanel, "Remove database", new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            Button delButton = UIUtils.createDialogButton(buttonsPanel, "Remove database", SelectionListener.widgetSelectedAdapter(e -> {
                     DBNNode selectedNode = NavigatorUtils.getSelectedNode(selectorPanel.getSelection());
                     if (selectedNode instanceof DBNDatabaseNode) {
                         getWizard().removeAvailableDataSource(((DBNDatabaseNode) selectedNode).getDataSourceContainer());
                         refreshDataSources();
                     }
-                }
-            });
+                }));
             delButton.setEnabled(false);
             selectorPanel.addSelectionListener(event -> {
                 DBNNode selectedNode = NavigatorUtils.getSelectedNode(event.getSelection());

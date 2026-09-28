@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +18,7 @@
 package org.jkiss.dbeaver.ui.dialogs.connection;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
@@ -36,6 +34,7 @@ import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.internal.UIConnectionMessages;
 import org.jkiss.dbeaver.ui.navigator.NavigatorUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,21 +45,40 @@ public class ProjectSelectorPanel {
     private Label headerLabel;
     private DBPProject selectedProject;
 
-    public ProjectSelectorPanel(@NotNull Composite parent, @Nullable DBPProject activeProject, int style) {
+    public ProjectSelectorPanel(
+        @NotNull Composite parent,
+        @Nullable DBPProject activeProject,
+        int style
+    ) {
         this(parent, activeProject, style, false, true);
     }
 
-    public ProjectSelectorPanel(@NotNull Composite parent, @Nullable DBPProject activeProject, int style, boolean showOnlyEditable) {
+    public ProjectSelectorPanel(
+        @NotNull Composite parent,
+        @Nullable DBPProject activeProject,
+        int style,
+        boolean showOnlyEditable
+    ) {
         this(parent, activeProject, style, showOnlyEditable, true);
     }
 
-    public ProjectSelectorPanel(@NotNull Composite parent, @Nullable DBPProject activeProject, int style, boolean showOnlyEditable, boolean alignRight) {
-        final List<? extends DBPProject> projects = DBWorkbench.getPlatform().getWorkspace().getProjects();
+    public ProjectSelectorPanel(
+        @NotNull Composite parent,
+        @Nullable DBPProject activeProject,
+        int style,
+        boolean showOnlyEditable,
+        boolean alignRight
+    ) {
+        final List<? extends DBPProject> projects = new ArrayList<>(
+            DBWorkbench.getPlatform().getWorkspace().getProjects());
+        projects.sort((o1, o2) ->
+            o1.getDisplayName().compareToIgnoreCase(o2.getDisplayName()));
+
         if (showOnlyEditable) {
             projects.removeIf(p -> !p.hasRealmPermission(RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT));
         }
         if (projects.size() == 1) {
-            selectedProject = projects.get(0);
+            selectedProject = projects.getFirst();
         } else if (projects.size() > 1) {
 
             boolean showIcon = (style & SWT.ICON) != 0;
@@ -79,23 +97,19 @@ public class ProjectSelectorPanel {
             }
 
             if (selectedProject == null) {
-                selectedProject = NavigatorUtils.getSelectedProject();
+                selectedProject = activeProject;
+                if (selectedProject == null) {
+                    selectedProject = NavigatorUtils.getSelectedProject();
+                }
                 if (!projects.contains(selectedProject)) {
-                    selectedProject = projects.get(0);
+                    selectedProject = projects.getFirst();
                 }
             }
             projectCombo.setText(selectedProject.getName());
-            projectCombo.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            projectCombo.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     selectedProject = projects.get(projectCombo.getSelectionIndex());
                     onProjectChange();
-                }
-            });
-
-            if (projects.size() < 2) {
-                //projectCombo.setEnabled(false);
-            }
+                }));
         }
     }
 
@@ -103,6 +117,7 @@ public class ProjectSelectorPanel {
 
     }
 
+    @Nullable
     public DBPProject getSelectedProject() {
         return selectedProject;
     }

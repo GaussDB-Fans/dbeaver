@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,7 @@ package org.jkiss.dbeaver.ext.postgresql.tools.fdw;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.dbeaver.DBException;
@@ -90,14 +89,11 @@ class PostgreFDWConfigWizardPageConfig extends ActiveWizardPage<PostgreFDWConfig
             fdwGroup.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 
             fdwCombo = UIUtils.createLabelCombo(fdwGroup, "Wrapper", SWT.DROP_DOWN | SWT.READ_ONLY);
-            fdwCombo.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            fdwCombo.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     getWizard().setSelectedFDW(fdwList.get(fdwCombo.getSelectionIndex()));
                     refreshFDWProperties();
                     updatePageCompletion();
-                }
-            });
+                }));
             UIUtils.createEmptyLabel(fdwGroup, 1, 1);
             UIUtils.createInfoLabel(fdwGroup, "If you don't see right data wrapper in the list, install it on the server first.");
         }
@@ -105,19 +101,16 @@ class PostgreFDWConfigWizardPageConfig extends ActiveWizardPage<PostgreFDWConfig
         SashForm sashForm = new SashForm(composite, SWT.HORIZONTAL);
         sashForm.setLayoutData(new GridData(GridData.FILL_BOTH));
         {
-            Group settingsGroup = UIUtils.createControlGroup(sashForm, "Settings", 2, GridData.FILL_BOTH, 0);
+            Composite settingsGroup = UIUtils.createTitledComposite(sashForm, "Settings", 2, GridData.FILL_BOTH);
 
             fdwServerText = UIUtils.createLabelText(settingsGroup, "Server ID", "", SWT.BORDER);
             fdwServerText.addModifyListener(e -> getWizard().setFdwServerId(fdwServerText.getText()));
 
             schemaCombo = UIUtils.createLabelCombo(settingsGroup, "Target schema", SWT.DROP_DOWN | SWT.READ_ONLY);
-            schemaCombo.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            schemaCombo.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     getWizard().setSelectedSchema(schemaList.get(schemaCombo.getSelectionIndex()));
                     updatePageCompletion();
-                }
-            });
+                }));
 
             //UIUtils.createControlLabel(settingsGroup, "Options", 2);
             propsEditor = new PropertyTreeViewer(settingsGroup, SWT.BORDER);
@@ -128,7 +121,7 @@ class PostgreFDWConfigWizardPageConfig extends ActiveWizardPage<PostgreFDWConfig
             propsEditor.getControl().setLayoutData(gd);
         }
         {
-            Group tablesGroup = UIUtils.createControlGroup(sashForm, "Tables", 2, GridData.FILL_BOTH, 0);
+            Composite tablesGroup = UIUtils.createTitledComposite(sashForm, "Tables", 2, GridData.FILL_BOTH);
 
             targetDataSourceText = UIUtils.createLabelText(tablesGroup, "Data source", "", SWT.BORDER | SWT.READ_ONLY);
             targetDriverText = UIUtils.createLabelText(tablesGroup, "Driver", "", SWT.BORDER | SWT.READ_ONLY);

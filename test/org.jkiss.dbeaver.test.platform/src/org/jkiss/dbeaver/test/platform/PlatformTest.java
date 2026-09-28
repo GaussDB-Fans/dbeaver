@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,27 +19,48 @@ package org.jkiss.dbeaver.test.platform;
 
 import org.jkiss.dbeaver.model.runtime.VoidProgressMonitor;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-public class PlatformTest {
+import java.nio.file.Files;
 
-    @Before
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class PlatformTest extends DBeaverUnitTest {
+    @BeforeEach
     public void setUp() throws Exception {
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
     }
 
     @Test
     public void testPlatformPresence() {
         try {
-            String infoDetails = DBWorkbench.getPlatform().getApplication().getInfoDetails(new VoidProgressMonitor());
+            String infoDetails = DBWorkbench.getPlatform().getApplication().getInfoDetails();
             System.out.println("DBeaver application: " + infoDetails);
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    @Test
+    public void testNamedTempFoldersShareSessionRoot() throws Exception {
+        var platform = DBWorkbench.getPlatform();
+        var monitor = new VoidProgressMonitor();
+        var first = platform.getTempFolder(monitor, "platform-test-first");
+        var second = platform.getTempFolder(monitor, "platform-test-second");
+
+        assertTrue(Files.isDirectory(first));
+        assertTrue(Files.isDirectory(second));
+        assertNotEquals(first, second);
+        assertEquals(first.getParent(), second.getParent());
+        assertEquals(first, platform.getTempFolder(monitor, "platform-test-first"));
+        assertEquals(".dbeaver-temp", first.getParent().getParent().getFileName().toString());
     }
 }

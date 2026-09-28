@@ -1,8 +1,10 @@
 #################
 ## Misc
 
+osgi-cache/
 bin/
 tmp/
+dbeaver-workspace
 *.tmp
 *.bak
 *.swp
@@ -28,8 +30,10 @@ buildNumber.properties
 /workspace/
 
 ## IDEA configs
-
+.idea/
 *.iml
+*.ipr
+*.iws
 /idea/
 
 ## Eclipse configs
@@ -37,8 +41,6 @@ buildNumber.properties
 .project
 .classpath
 .settings/
-
-## Eclipse PDE
 *.product.launch
 
 # Dev executables
@@ -62,3 +64,4 @@ $RECYCLE.BIN/
 
 # Mac crap
 .DS_Store
+test/**/workspace/

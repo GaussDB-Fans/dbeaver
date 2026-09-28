@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@ import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.jface.dialogs.ControlEnableState;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
@@ -32,6 +30,7 @@ import org.eclipse.ui.IWorkbenchPreferencePage;
 import org.eclipse.ui.IWorkbenchPropertyPage;
 import org.eclipse.ui.forms.widgets.ExpandableComposite;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
@@ -50,11 +49,12 @@ import org.jkiss.dbeaver.ui.preferences.AbstractPrefPage;
 import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.dbeaver.utils.PrefUtils;
 
+import java.util.Optional;
+
 /**
  * PrefPageSQLResources
  */
-public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbenchPreferencePage, IWorkbenchPropertyPage
-{
+public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbenchPreferencePage, IWorkbenchPropertyPage {
     public static final String PAGE_ID = "org.jkiss.dbeaver.preferences.main.sql.resources"; //$NON-NLS-1$
 
     private static final Log log = Log.getLog(PrefPageSQLResources.class);
@@ -64,10 +64,12 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
     private Combo deleteEmptyCombo;
     private Button autoFoldersCheck;
     private Button connectionFoldersCheck;
+    private Optional<Button> autoAttachConnectionsToScriptsCheck;
     private Text scriptTitlePattern;
     private Text scriptFileNamePattern;
     private Spinner bigScriptFileSizeBoundarySpinner;
     private Button bindEmbeddedReadCheck;
+    private Button bindEmbeddedReadConfirmCheck;
     private Button bindEmbeddedWriteCheck;
     private Composite commentTypeComposite;
     private ControlEnableState commentTypeEnableBlock;
@@ -90,7 +92,12 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
 
         // Resources
         {
-            Composite scriptsGroup = UIUtils.createControlGroup(composite, SQLEditorMessages.pref_page_sql_editor_group_resources, 2, GridData.FILL_HORIZONTAL, 0);
+            Composite scriptsGroup = UIUtils.createTitledComposite(
+                composite,
+                SQLEditorMessages.pref_page_sql_editor_group_resources,
+                2,
+                GridData.FILL_HORIZONTAL
+            );
 
             if (this.isStandaloneApp) {
                 deleteEmptyCombo = UIUtils.createLabelCombo(scriptsGroup, SQLEditorMessages.pref_page_sql_editor_checkbox_delete_empty_scripts, SWT.DROP_DOWN | SWT.READ_ONLY);
@@ -112,6 +119,9 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
                 SQLEditorMessages.pref_page_sql_editor_checkbox_create_script_folders_tip,
                 store.getBoolean(SQLPreferenceConstants.SCRIPT_CREATE_CONNECTION_FOLDERS),
                 2);
+            autoAttachConnectionsToScriptsCheck = !DBWorkbench.isDistributed()
+                ? Optional.of(createConnectionToScritpsCheckbox(scriptsGroup, store))
+                : Optional.empty();
             scriptTitlePattern = UIUtils.createLabelText(
                 scriptsGroup,
                 SQLEditorMessages.pref_page_sql_editor_title_pattern,
@@ -162,8 +172,7 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
 
         // New Script template
         {
-            Composite group = UIUtils.createControlGroup(composite, SQLEditorMessages.pref_page_sql_editor_new_script_template_group, 1, GridData.FILL_BOTH, 0);
-            ((GridData) group.getLayoutData()).horizontalSpan = 2;
+            Composite group = UIUtils.createTitledComposite(composite, SQLEditorMessages.pref_page_sql_editor_new_script_template_group, 1, GridData.FILL_BOTH);
 
             sqlTemplateEnabledCheckbox = UIUtils.createCheckbox(
                 group,
@@ -177,6 +186,7 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
                 ((GridData) sqlTemplateViewerComposite.getLayoutData()).heightHint = 200;
 
                 sqlTemplateViewer = new SQLEditorBase() {
+                    @Nullable
                     @Override
                     public DBCExecutionContext getExecutionContext() {
                         return null;
@@ -187,12 +197,8 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
                 sqlTemplateViewer.createPartControl(sqlTemplateViewerComposite);
                 sqlTemplateViewerComposite.addDisposeListener(e -> sqlTemplateViewer.dispose());
 
-                sqlTemplateEnabledCheckbox.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        UIUtils.enableWithChildren(sqlTemplateViewerComposite, sqlTemplateEnabledCheckbox.getSelection());
-                    }
-                });
+                sqlTemplateEnabledCheckbox.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+                    UIUtils.enableWithChildren(sqlTemplateViewerComposite, sqlTemplateEnabledCheckbox.getSelection())));
             }
 
             new VariablesHintLabel(
@@ -210,14 +216,13 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
             expander.setLayoutData(new GridData(GridData.FILL, GridData.BEGINNING, false, false, 1, 1));
             expander.setText(SQLEditorMessages.sql_editor_prefs_script_advanced_settings);
 
-            Composite connGroup = UIUtils.createControlGroup(
+            Composite connGroup = UIUtils.createTitledComposite(
                 expander,
                 SQLEditorMessages.pref_page_sql_editor_group_connection_association,
                 2,
-                GridData.FILL_HORIZONTAL,
-                0
+                GridData.FILL_HORIZONTAL
             );
-            expander.setClient(connGroup);
+            expander.setClient(connGroup.getParent());
             Label tipLabel = new Label(connGroup, SWT.WRAP);
             tipLabel.setText(SQLEditorMessages.pref_page_sql_editor_checkbox_bind_connection_hint);
             GridData gd = new GridData(GridData.FILL_HORIZONTAL);
@@ -231,18 +236,20 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
                 store.getBoolean(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_READ),
                 2);
 
+            bindEmbeddedReadConfirmCheck = UIUtils.createCheckbox(
+                connGroup,
+                SQLEditorMessages.pref_page_sql_editor_checkbox_bind_embedded_read_confirm,
+                SQLEditorMessages.pref_page_sql_editor_checkbox_bind_embedded_read_confirm_tip,
+                store.getBoolean(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_READ_CONFIRM),
+                2);
+
             bindEmbeddedWriteCheck = UIUtils.createCheckbox(
                 connGroup,
                 SQLEditorMessages.pref_page_sql_editor_checkbox_bind_embedded_write,
                 SQLEditorMessages.pref_page_sql_editor_checkbox_bind_embedded_write_tip,
                 store.getBoolean(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_WRITE),
                 2);
-            bindEmbeddedWriteCheck.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    enableCommentType();
-                }
-            });
+            bindEmbeddedWriteCheck.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> enableCommentType()));
 
             commentTypeComposite = UIUtils.createComposite(connGroup, 1);
             for (SQLScriptBindingType bt : SQLScriptBindingType.values()) {
@@ -257,6 +264,17 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
         setSettings(store);
 
         return composite;
+    }
+
+    @NotNull
+    private Button createConnectionToScritpsCheckbox(@NotNull Composite scriptsGroup, @NotNull DBPPreferenceStore store) {
+        return UIUtils.createCheckbox(
+            scriptsGroup,
+            SQLEditorMessages.pref_page_sql_editor_checkbox_attach_scripts_to_connection,
+            SQLEditorMessages.pref_page_sql_editor_checkbox_attach_scripts_to_connection_tip,
+            store.getBoolean(SQLPreferenceConstants.SCRIPT_ATTACH_SCRIPTS_TO_CONNECTIONS),
+            2
+        );
     }
 
     private void setSettings(@NotNull DBPPreferenceStore store) {
@@ -286,6 +304,7 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
     protected void performDefaults() {
         DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
         bindEmbeddedReadCheck.setSelection(store.getDefaultBoolean(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_READ));
+        bindEmbeddedReadConfirmCheck.setSelection(store.getDefaultBoolean(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_READ_CONFIRM));
         bindEmbeddedWriteCheck.setSelection(store.getDefaultBoolean(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_WRITE));
         setScriptBindingTypes(SQLScriptBindingType.NAME);
         enableCommentType();
@@ -294,6 +313,9 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
             deleteEmptyCombo.setText(store.getDefaultString(SQLPreferenceConstants.SCRIPT_DELETE_EMPTY));
         }
         autoFoldersCheck.setSelection(store.getDefaultBoolean(SQLPreferenceConstants.SCRIPT_AUTO_FOLDERS));
+        autoAttachConnectionsToScriptsCheck.ifPresent(
+            box -> box.setSelection(store.getDefaultBoolean(SQLPreferenceConstants.SCRIPT_ATTACH_SCRIPTS_TO_CONNECTIONS
+            )));
         connectionFoldersCheck.setSelection(store.getDefaultBoolean(SQLPreferenceConstants.SCRIPT_CREATE_CONNECTION_FOLDERS));
         scriptTitlePattern.setText(store.getDefaultString(SQLPreferenceConstants.SCRIPT_TITLE_PATTERN));
         scriptFileNamePattern.setText(store.getDefaultString(SQLPreferenceConstants.SCRIPT_FILE_NAME_PATTERN));
@@ -326,6 +348,7 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
         DBPPreferenceStore store = DBWorkbench.getPlatform().getPreferenceStore();
 
         store.setValue(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_READ, bindEmbeddedReadCheck.getSelection());
+        store.setValue(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_READ_CONFIRM, bindEmbeddedReadConfirmCheck.getSelection());
         store.setValue(SQLPreferenceConstants.SCRIPT_BIND_EMBEDDED_WRITE, bindEmbeddedWriteCheck.getSelection());
         try {
             for (Control ch : commentTypeComposite.getChildren()) {
@@ -342,6 +365,11 @@ public class PrefPageSQLResources extends AbstractPrefPage implements IWorkbench
                 SQLPreferenceConstants.EmptyScriptCloseBehavior.getByTitle(deleteEmptyCombo.getText()).name());
         }
         store.setValue(SQLPreferenceConstants.SCRIPT_AUTO_FOLDERS, autoFoldersCheck.getSelection());
+
+        autoAttachConnectionsToScriptsCheck.ifPresent(
+            box -> store.setValue(SQLPreferenceConstants.SCRIPT_ATTACH_SCRIPTS_TO_CONNECTIONS, box.getSelection())
+        );
+
         store.setValue(SQLPreferenceConstants.SCRIPT_CREATE_CONNECTION_FOLDERS, connectionFoldersCheck.getSelection());
         store.setValue(SQLPreferenceConstants.SCRIPT_TITLE_PATTERN, scriptTitlePattern.getText());
         store.setValue(SQLPreferenceConstants.SCRIPT_FILE_NAME_PATTERN, scriptFileNamePattern.getText());

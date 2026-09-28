@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -39,7 +38,6 @@ import org.eclipse.ui.IWorkbenchSite;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
-import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ext.postgresql.PostgreMessages;
 import org.jkiss.dbeaver.ext.postgresql.edit.PostgreCommandGrantPrivilege;
 import org.jkiss.dbeaver.ext.postgresql.model.*;
@@ -56,6 +54,7 @@ import org.jkiss.dbeaver.model.runtime.load.DatabaseLoadService;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.rdb.DBSProcedure;
 import org.jkiss.dbeaver.model.struct.rdb.DBSSequence;
+import org.jkiss.dbeaver.ui.BaseThemeSettings;
 import org.jkiss.dbeaver.ui.LoadingJob;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.ProgressPageControl;
@@ -217,11 +216,11 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
             ),
             new DBECommandReflector<PostgrePrivilegeOwner, PostgreCommandGrantPrivilege>() {
                 @Override
-                public void redoCommand(PostgreCommandGrantPrivilege cmd) {
+                public void redoCommand(@NotNull PostgreCommandGrantPrivilege cmd) {
                 }
 
                 @Override
-                public void undoCommand(PostgreCommandGrantPrivilege cmd) {
+                public void undoCommand(@NotNull PostgreCommandGrantPrivilege cmd) {
                 }
             });
     }
@@ -269,7 +268,7 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
 
         permissionTable.removeAll();
 
-        PostgrePrivilegeType[] supportedPrivilegeTypes = getSupportedPrivilegeTypes(objects.get(0));
+        PostgrePrivilegeType[] supportedPrivilegeTypes = getSupportedPrivilegeTypes(objects.getFirst());
         PostgrePrivilege objectPermissions = getObjectPermissions(selectedObjects[0]);
         for (PostgrePrivilegeType privilegeType : supportedPrivilegeTypes) {
             TableItem tableItem = new TableItem(permissionTable, SWT.LEFT);
@@ -316,7 +315,7 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
         LoadingJob.createService(
             new DatabaseLoadService<>("Load permissions", getExecutionContext()) {
                 @Override
-                public PermissionInfo evaluate(DBRProgressMonitor monitor) throws InvocationTargetException {
+                public PermissionInfo evaluate(@NotNull DBRProgressMonitor monitor) throws InvocationTargetException {
                     monitor.beginTask("Load privileges from database..", 1);
                     try {
                         monitor.subTask("Load " + getDatabaseObject().getName() + " privileges");
@@ -354,7 +353,7 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
         ProgressVisualizer<PermissionInfo> createLoadVisualizer() {
             return new ProgressVisualizer<>() {
                 @Override
-                public void completeLoading(PermissionInfo privs) {
+                public void completeLoading(@Nullable PermissionInfo privs) {
                     super.completeLoading(privs);
                     if (privs == null) {
                         return;
@@ -372,7 +371,7 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
         }
 
         @Override
-        public void fillCustomActions(IContributionManager contributionManager) {
+        public void fillCustomActions(@NotNull IContributionManager contributionManager) {
             super.fillCustomActions(contributionManager);
 
             contributionManager.add(new Separator());
@@ -400,9 +399,7 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
         UIUtils.createTableColumn(table, SWT.LEFT, PostgreMessages.dialog_create_table_column_name_permission);
         UIUtils.createTableColumn(table, SWT.CENTER, PostgreMessages.dialog_create_table_column_name_with_garant);
         UIUtils.createTableColumn(table, SWT.CENTER, PostgreMessages.dialog_create_table_column_name_with_hierarchy);
-        table.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        table.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 if (e.item instanceof TableItem tableItem && e.detail == SWT.CHECK) {
                     PostgrePrivilegeType[] privilegeTypes = {(PostgrePrivilegeType) tableItem.getData()};
                     if (tableItem.getChecked()) {
@@ -411,8 +408,7 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
                         revokeFromSelectedObjects(privilegeTypes);
                     }
                 }
-            }
-        });
+            }));
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseDown(MouseEvent e) {
@@ -450,11 +446,11 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
                         String schemaPrefix = DBUtils.getQuotedIdentifier(object) + ".";
                         for (String tableName : objectNames) {
                             if (tableName.startsWith(schemaPrefix)) {
-                                return boldFont;
+                                return BaseThemeSettings.instance.treeAndTableFontBold;
                             }
                         }
                     } else if (getObjectPermissions(object) != null) {
-                        return boldFont;
+                        return BaseThemeSettings.instance.treeAndTableFontBold;
                     }
                 }
                 return null;
@@ -467,8 +463,8 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
                 if (element instanceof DBNNode && !(element instanceof DBNDatabaseNode)) {
                     return false;
                 }
-                if (element instanceof DBNDatabaseFolder) {
-                    final DBXTreeFolder meta = ((DBNDatabaseFolder) element).getMeta();
+                if (element instanceof DBNDatabaseFolder dbFolder) {
+                    final DBXTreeFolder meta = dbFolder.getMeta();
                     final Class<?> childType = meta.getSource().getObjectClass(meta.getType());
                     if (childType == null) {
                         return false;
@@ -499,31 +495,21 @@ abstract class PostgresPermissionsEditor<T extends DBSObject>
             buttonPanel,
             PostgreMessages.dialog_create_push_button_grant_all,
             null,
-            new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    grantAllCurrentPrivileges();
-                }
-            }
+            SelectionListener.widgetSelectedAdapter(e -> grantAllCurrentPrivileges())
         );
 
         UIUtils.createPushButton(
             buttonPanel,
             PostgreMessages.dialog_create_push_button_revoke_all,
             null,
-            new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    revokeAllCurrentPrivileges();
-                }
-            }
+            SelectionListener.widgetSelectedAdapter(e -> revokeAllCurrentPrivileges())
         );
     }
 
     private void addText(Composite parent) {
         selectedObjectNames = new Text(
             parent,
-            SWT.READ_ONLY | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL
+            SWT.BORDER | SWT.READ_ONLY | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL
         );
         selectedObjectNames.setLayoutData(new GridData(GridData.FILL_BOTH));
     }

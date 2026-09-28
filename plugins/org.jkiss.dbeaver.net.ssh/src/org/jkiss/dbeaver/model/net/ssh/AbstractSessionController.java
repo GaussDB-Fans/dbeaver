@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,10 +29,14 @@ import org.jkiss.dbeaver.model.net.DBWHandlerConfiguration;
 import org.jkiss.dbeaver.model.net.ssh.config.SSHHostConfiguration;
 import org.jkiss.dbeaver.model.net.ssh.config.SSHPortForwardConfiguration;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+import org.jkiss.dbeaver.utils.RuntimeUtils;
+import org.jkiss.utils.CommonUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +47,6 @@ public abstract class AbstractSessionController<T extends AbstractSession> imple
     private static final Log log = Log.getLog(AbstractSessionController.class);
 
     protected final Map<SSHHostConfiguration, ShareableSession<T>> sessions = new ConcurrentHashMap<>();
-    protected AgentIdentityRepository agentIdentityRepository;
 
     @NotNull
     @Override
@@ -130,35 +133,51 @@ public abstract class AbstractSessionController<T extends AbstractSession> imple
         return getDelegateSession(session).getDataSources();
     }
 
+    /**
+     * Creates an identity repository for SSH agent authentication.
+     * <p>
+     * On Windows, Pageant is preferred.
+     * The {@code authSockPath} parameter is only used on non-Windows platforms
+     * (macOS, Linux) where Unix domain sockets are available.
+     * </p>
+     *
+     * @param authSockPath authSockPath custom SSH agent socket path (ignored on Windows)
+     */
     @NotNull
-    protected IdentityRepository createAgentIdentityRepository() throws DBException {
-        if (agentIdentityRepository == null) {
-            AgentConnector connector = null;
+    protected IdentityRepository createAgentIdentityRepository(@Nullable String authSockPath) throws DBException {
+        AgentConnector connector = null;
 
+        // PageantConnector only works on Windows.
+        // On Windows, Pageant takes priority and authSockPath is not applicable.
+        if (RuntimeUtils.isWindows()) {
             try {
                 connector = new PageantConnector();
                 log.debug("SSHSessionController: connected with pageant");
             } catch (Exception e) {
                 log.debug("SSHSessionController: pageant connect exception", e);
             }
-
-            if (connector == null) {
-                try {
+        } else {
+            try {
+                if (CommonUtils.isNotEmpty(authSockPath)) {
+                    connector = new SSHAgentConnector(new JUnixSocketFactory(), Path.of(authSockPath));
+                    log.debug("SSHSessionController: Connected with ssh-agent using custom socket: " + authSockPath);
+                } else {
                     connector = new SSHAgentConnector(new JUnixSocketFactory());
                     log.debug("SSHSessionController: Connected with ssh-agent");
-                } catch (Exception e) {
-                    log.debug("SSHSessionController: ssh-agent connection exception", e);
                 }
+            } catch (InvalidPathException e) {
+                log.debug("SSHSessionController: invalid ssh-agent auth socket path", e);
+                throw new DBException("SSH agent socket path is invalid: " + authSockPath);
+            } catch (Exception e) {
+                log.debug("SSHSessionController: ssh-agent connection exception", e);
             }
-
-            if (connector == null) {
-                throw new DBException("Unable to initialize SSH agent");
-            }
-
-            agentIdentityRepository = new AgentIdentityRepository(connector);
         }
 
-        return agentIdentityRepository;
+        if (connector == null) {
+            throw new DBException("Unable to initialize SSH agent");
+        }
+
+        return new AgentIdentityRepository(connector);
     }
 
     @NotNull
@@ -266,13 +285,21 @@ public abstract class AbstractSessionController<T extends AbstractSession> imple
             @NotNull DBWHandlerConfiguration configuration,
             long timeout
         ) throws DBException {
-            if (portForward != null) {
-                jumpDestination.removePortForward(portForward);
-            }
+            if (jumpDestination != null) {
+                if (portForward != null) {
+                    jumpDestination.removePortForward(portForward);
+                }
 
-            jumpDestination.disconnect(monitor, configuration, timeout);
-            origin.removePortForward(jumpPortForward);
-            origin.disconnect(monitor, configuration, timeout);
+                jumpDestination.disconnect(monitor, configuration, timeout);
+            }
+            if (jumpPortForward != null) {
+                origin.removePortForward(jumpPortForward);
+            }
+            try {
+                origin.disconnect(monitor, configuration, timeout);
+            } catch (Exception e) {
+                log.debug("Error during SSH session close", e);
+            }
 
             registered = false;
             jumpDestination = null;
@@ -471,9 +498,8 @@ public abstract class AbstractSessionController<T extends AbstractSession> imple
         public void removePortForward(@NotNull SSHPortForwardConfiguration configuration) throws DBException {
             final PortForwardInfo info = portForwards.get(configuration);
             if (info == null) {
-                throw new DBException("Port forward is not set up: " + configuration);
-            }
-            if (info.usages.decrementAndGet() == 0) {
+                log.debug("SSH port forward is not set up: " + configuration + ". Tunnel opening was interrupted?");
+            } else if (info.usages.decrementAndGet() == 0) {
                 super.removePortForward(info.resolved);
                 portForwards.remove(configuration);
             }

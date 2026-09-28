@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,16 +20,14 @@ import org.jkiss.dbeaver.model.impl.jdbc.JDBCDataSource;
 import org.jkiss.dbeaver.model.impl.jdbc.JDBCSQLDialect;
 import org.jkiss.dbeaver.model.struct.DBSDataType;
 import org.jkiss.dbeaver.model.struct.DBSTypedObject;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 
-@RunWith(MockitoJUnitRunner.class)
-public class DataTypeConverterTest {
+public class DataTypeConverterTest extends DBeaverUnitTest {
 
     @Mock
     DBSTypedObject mockTypedObject;
@@ -40,7 +38,7 @@ public class DataTypeConverterTest {
 
     private JDBCSQLDialect dialect;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         dialect = new JDBCSQLDialect("testName", "testID");
         Mockito.lenient().when(mockDataSource.getSQLDialect()).thenReturn(dialect);
@@ -51,7 +49,7 @@ public class DataTypeConverterTest {
         Mockito.when(mockTypedObject.getTypeName()).thenReturn("varchar");
         Mockito.when(mockTypedObject.getMaxLength()).thenReturn(-1L);
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, mockDataSource);
-        Assert.assertNull(actualDataType);
+        Assertions.assertNull(actualDataType);
     }
 
     @Test
@@ -61,7 +59,7 @@ public class DataTypeConverterTest {
         Mockito.when(mockDataSource.getLocalDataType("clob")).thenReturn(mockDataType);
         Mockito.when(mockDataType.getName()).thenReturn("CLOB");
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, mockDataSource);
-        Assert.assertEquals("CLOB", actualDataType);
+        Assertions.assertEquals("CLOB", actualDataType);
     }
 
     @Test
@@ -71,6 +69,6 @@ public class DataTypeConverterTest {
         Mockito.when(mockDataSource.getLocalDataType("text")).thenReturn(mockDataType);
         Mockito.when(mockDataType.getName()).thenReturn("text");
         String actualDataType = dialect.convertExternalDataType(dialect, mockTypedObject, mockDataSource);
-        Assert.assertEquals("text", actualDataType);
+        Assertions.assertEquals("text", actualDataType);
     }
 }

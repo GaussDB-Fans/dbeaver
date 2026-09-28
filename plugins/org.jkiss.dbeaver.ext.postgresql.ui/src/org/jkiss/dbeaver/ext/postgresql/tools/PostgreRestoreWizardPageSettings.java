@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 package org.jkiss.dbeaver.ext.postgresql.tools;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.dbeaver.ext.postgresql.PostgreMessages;
@@ -62,7 +61,12 @@ class PostgreRestoreWizardPageSettings extends PostgreToolWizardPageSettings<Pos
 
         Listener updateListener = event -> updateState();
 
-        Group formatGroup = UIUtils.createControlGroup(composite, PostgreMessages.wizard_restore_page_setting_label_setting, 2, GridData.FILL_HORIZONTAL, 0);
+        Composite formatGroup = UIUtils.createTitledComposite(
+            composite,
+            PostgreMessages.wizard_restore_page_setting_label_setting,
+            2,
+            GridData.FILL_HORIZONTAL
+        );
         formatCombo = UIUtils.createLabelCombo(formatGroup, PostgreMessages.wizard_restore_page_setting_label_format, SWT.DROP_DOWN | SWT.READ_ONLY);
         formatCombo.setLayoutData(new GridData(GridData.HORIZONTAL_ALIGN_BEGINNING));
         for (PostgreDatabaseBackupSettings.ExportFormat format : PostgreDatabaseBackupSettings.ExportFormat.values()) {
@@ -78,14 +82,11 @@ class PostgreRestoreWizardPageSettings extends PostgreToolWizardPageSettings<Pos
             settings.isCleanFirst(),
             2
         );
-        cleanFirstButton.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        cleanFirstButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 if (cleanFirstButton.getSelection() && !confirmDropDatabaseAction()) {
                     cleanFirstButton.setSelection(false);
                 }
-            }
-        });
+            }));
         cleanFirstButton.addListener(SWT.Selection, updateListener);
 
         createDatabase = UIUtils.createCheckbox(formatGroup,
@@ -104,7 +105,12 @@ class PostgreRestoreWizardPageSettings extends PostgreToolWizardPageSettings<Pos
         );
         noOwnerCheck.addListener(SWT.Selection, updateListener);
 
-        Group inputGroup = UIUtils.createControlGroup(composite, PostgreMessages.wizard_restore_page_setting_label_input, 2, GridData.FILL_HORIZONTAL, 0);
+        Composite inputGroup = UIUtils.createTitledComposite(
+            composite,
+            PostgreMessages.wizard_restore_page_setting_label_input,
+            2,
+            GridData.FILL_HORIZONTAL
+        );
         UIUtils.createControlLabel(inputGroup, PostgreMessages.wizard_restore_page_setting_label_backup_file);
         inputFileText = new TextWithOpenFileRemote(
             inputGroup,

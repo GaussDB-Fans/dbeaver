@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +17,7 @@
 package org.jkiss.dbeaver.ui.dashboard.navigator;
 
 import org.eclipse.jface.wizard.WizardPage;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
@@ -79,7 +77,7 @@ class DashboardCreateWizardPage extends WizardPage {
 
     @Override
     public void createControl(Composite parent) {
-        Composite configGroup = UIUtils.createControlGroup(parent, "Settings", 2, GridData.FILL_BOTH, 0);
+        Composite configGroup = UIUtils.createTitledComposite(parent, "Settings", 2, GridData.FILL_BOTH);
 
         final Text dashboardNameText = UIUtils.createLabelText(configGroup, "Name", null); //$NON-NLS-1$
         final Text dashboardIdText = UIUtils.createLabelText(configGroup, "ID", null); //$NON-NLS-1$
@@ -105,12 +103,8 @@ class DashboardCreateWizardPage extends WizardPage {
             UIDashboardMessages.dialog_dashboard_view_config_group_viewcfg_checkbox_init_default_tooltip,
             true,
             2);
-        initDefChartsCheck.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                initDefCharts = initDefChartsCheck.getSelection();
-            }
-        });
+        initDefChartsCheck.addSelectionListener(SelectionListener.widgetSelectedAdapter(e ->
+            initDefCharts = initDefChartsCheck.getSelection()));
         setControl(configGroup);
     }
 

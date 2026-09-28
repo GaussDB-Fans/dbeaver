@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,8 +55,8 @@ public class OracleTableIndex extends JDBCTableIndex<OracleSchema, OracleTableBa
         OracleSchema schema,
         OracleTableBase table,
         String indexName,
-        ResultSet dbResult)
-    {
+        ResultSet dbResult
+    ) {
         super(schema, table, indexName, null, true);
         String indexTypeName = JDBCUtils.safeGetString(dbResult, "INDEX_TYPE");
         this.nonUnique = !"UNIQUE".equals(JDBCUtils.safeGetString(dbResult, "UNIQUENESS"));
@@ -84,15 +84,13 @@ public class OracleTableIndex extends JDBCTableIndex<OracleSchema, OracleTableBa
 
     @NotNull
     @Override
-    public OracleDataSource getDataSource()
-    {
+    public OracleDataSource getDataSource() {
         return getTable().getDataSource();
     }
 
     @Override
     @Property(viewable = true, order = 5)
-    public boolean isUnique()
-    {
+    public boolean isUnique() {
         return !nonUnique;
     }
 
@@ -102,45 +100,39 @@ public class OracleTableIndex extends JDBCTableIndex<OracleSchema, OracleTableBa
 
     @Nullable
     @Override
-    public Object getLazyReference(Object propertyId)
-    {
+    public Object getLazyReference(Object propertyId) {
         return tablespace;
     }
 
     @Property(viewable = true, order = 10)
     @LazyProperty(cacheValidator = OracleTablespace.TablespaceReferenceValidator.class)
-    public Object getTablespace(DBRProgressMonitor monitor) throws DBException
-    {
+    public Object getTablespace(DBRProgressMonitor monitor) throws DBException {
         return OracleTablespace.resolveTablespaceReference(monitor, this, null);
     }
 
     @Nullable
     @Override
-    public String getDescription()
-    {
+    public String getDescription() {
         return null;
     }
 
+    @Nullable
     @Override
-    public List<OracleTableIndexColumn> getAttributeReferences(@NotNull DBRProgressMonitor monitor)
-    {
+    public List<OracleTableIndexColumn> getAttributeReferences(@Nullable DBRProgressMonitor monitor) {
         return columns;
     }
 
     @Nullable
     @Association
-    public OracleTableIndexColumn getColumn(String columnName)
-    {
+    public OracleTableIndexColumn getColumn(String columnName) {
         return DBUtils.findObject(columns, columnName);
     }
 
-    void setColumns(List<OracleTableIndexColumn> columns)
-    {
+    void setColumns(List<OracleTableIndexColumn> columns) {
         this.columns = columns;
     }
 
-    public void addColumn(OracleTableIndexColumn column)
-    {
+    public void addColumn(OracleTableIndexColumn column) {
         if (columns == null) {
             columns = new ArrayList<>();
         }
@@ -149,31 +141,79 @@ public class OracleTableIndex extends JDBCTableIndex<OracleSchema, OracleTableBa
 
     @NotNull
     @Override
-    public String getFullyQualifiedName(DBPEvaluationContext context)
-    {
-        return DBUtils.getFullQualifiedName(getDataSource(),
+    public String getFullyQualifiedName(@NotNull DBPEvaluationContext context) {
+        return DBUtils.getFullQualifiedName(
+            getDataSource(),
             getTable().getContainer(),
-            this);
+            this
+        );
     }
 
     @Override
-    public String toString()
-    {
+    public String toString() {
         return getFullyQualifiedName(DBPEvaluationContext.UI);
     }
 
+    @NotNull
     @Override
     @Property(hidden = true, editable = true, updatable = true, order = -1)
-    public String getObjectDefinitionText(DBRProgressMonitor monitor, Map<String, Object> options) throws DBException {
+    public String getObjectDefinitionText(@NotNull DBRProgressMonitor monitor, @NotNull Map<String, Object> options) throws DBException {
         if (indexDDL == null && isPersisted()) {
-            try (JDBCSession session = DBUtils.openMetaSession(monitor, this, "Read index definition")) {
-                indexDDL = JDBCUtils.queryString(session,"SELECT DBMS_METADATA.GET_DDL('INDEX', ?, ?) TXT FROM DUAL",
+            // DBMS_METADATA was introduced in Oracle 9i. On Oracle 8.x the call fails with
+            // ORA-00904], so we reconstruct a minimal CREATE INDEX statement from cached metadata instead.
+            if (getDataSource().isAtLeastV9()) {
+                try (JDBCSession session = DBUtils.openMetaSession(monitor, this, "Read index definition")) {
+                    indexDDL = JDBCUtils.queryString(session, "SELECT DBMS_METADATA.GET_DDL('INDEX', ?, ?) TXT FROM DUAL",
                         getName(),
-                        getTable().getSchema().getName());
-            } catch (SQLException e) {
-                throw new DBDatabaseException(e, getDataSource());
+                        getTable().getSchema().getName()
+                    );
+                } catch (SQLException e) {
+                    throw new DBDatabaseException(e, getDataSource());
+                }
+            } else {
+                indexDDL = buildIndexDDL();
             }
         }
         return indexDDL;
+    }
+
+    private @NotNull String buildIndexDDL() {
+        StringBuilder ddl = new StringBuilder("CREATE ");
+        if (!nonUnique) {
+            ddl.append("UNIQUE ");
+        } else if (OracleConstants.INDEX_TYPE_BITMAP.equals(indexType)
+            || OracleConstants.INDEX_TYPE_FUNCTION_BASED_BITMAP.equals(indexType)) {
+            ddl.append("BITMAP ");
+        }
+        ddl.append("INDEX ").append(getFullyQualifiedName(DBPEvaluationContext.DDL))
+            .append(" ON ").append(getTable().getFullyQualifiedName(DBPEvaluationContext.DDL))
+            .append(" (");
+        if (columns != null) {
+            boolean first = true;
+            for (OracleTableIndexColumn col : columns) {
+                if (!first) {
+                    ddl.append(", ");
+                }
+                first = false;
+                String expression = col.getColumnExpression();
+                if (expression != null && !expression.isEmpty()) {
+                    ddl.append(expression);
+                } else if (col.getTableColumn() != null) {
+                    ddl.append(DBUtils.getQuotedIdentifier(col.getTableColumn()));
+                } else {
+                    ddl.append(col.getName());
+                }
+                if (!col.isAscending()) {
+                    ddl.append(" DESC");
+                }
+            }
+        }
+        ddl.append(")");
+        if (tablespace instanceof OracleTablespace ts) {
+            ddl.append("\nTABLESPACE ").append(ts.getName());
+        } else if (tablespace instanceof String ts && !ts.isEmpty()) {
+            ddl.append("\nTABLESPACE ").append(ts);
+        }
+        return ddl.toString();
     }
 }

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Shell;
+import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPImage;
 import org.jkiss.dbeaver.model.runtime.DBRRunnableContext;
@@ -52,7 +53,7 @@ public class BaseProgressDialog extends BaseDialog implements DBRRunnableContext
     }
 
     @Override
-    protected Control createButtonBar(Composite parent) {
+    protected Control createButtonBar(@NotNull Composite parent) {
         // Horizontal separator
 //        new Label(mainComposite, SWT.HORIZONTAL | SWT.SEPARATOR)
 //            .setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
@@ -83,10 +84,11 @@ public class BaseProgressDialog extends BaseDialog implements DBRRunnableContext
     }
 
     @Override
-    public void run(boolean fork, boolean cancelable, DBRRunnableWithProgress runnable) throws InvocationTargetException, InterruptedException {
+    public void run(boolean fork, boolean cancelable, @NotNull DBRRunnableWithProgress runnable)
+            throws InvocationTargetException, InterruptedException {
         // Code copied from WizardDialog
         if (monitorPart != null) {
-            ((GridData)monitorPart.getLayoutData()).exclude = false;
+            ((GridData) monitorPart.getLayoutData()).exclude = false;
             monitorPart.setVisible(true);
             monitorPart.getParent().layout();
             monitorPart.attachToCancelComponent(null);

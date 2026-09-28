@@ -3,43 +3,28 @@
   
 <plugin>
 
-    <extension point="org.jkiss.dbeaver.dataSourceView">
-        <view
-                id="org.jkiss.dbeaver.ext.postgresql.dataSourceWizardView"
-                dataSource="postgresql"
-                targetID="org.jkiss.dbeaver.ext.ui.newConnectionWizard"
-                label="%dialog.connection.header"
-                class="org.jkiss.dbeaver.ext.postgresql.ui.PostgreConnectionPage"
-                icon="icons/database.png">
-        </view>
-        <view
-                class="org.jkiss.dbeaver.ext.postgresql.ui.PostgreConnectionPage"
-                icon="icons/database.png"
-                id="org.jkiss.dbeaver.ext.postgresql.dataSourceEditorView"
-                dataSource="postgresql"
-                label="%dialog.connection.header"
-                targetID="org.jkiss.dbeaver.ext.ui.editConnectionDialog">
-        </view>
+    <extension point="org.jkiss.dbeaver.dataSourceConfigurator">
+        <configurator dataSource="postgresql" class="org.jkiss.dbeaver.ext.postgresql.ui.PostgreConnectionPage"/>
     </extension>
 
     <extension point="org.eclipse.ui.editors">
         <editor
             name="%editor.session_manager.name"
-            icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/sessions.png"
+            icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/sessions.svg"
             class="org.jkiss.dbeaver.ext.postgresql.ui.editors.PostgreSessionEditor"
             id="org.jkiss.dbeaver.ext.postgresql.ui.editors.PostgreSessionEditor"
             contributorClass="org.jkiss.dbeaver.ui.editors.EditorSearchActionsContributor">
         </editor>
         <editor
             name="%editor.lock_manager.name"
-            icon="#locked"
+            icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/locked.svg"
             class="org.jkiss.dbeaver.ext.postgresql.ui.editors.PostgreLockEditor"
             id="org.jkiss.dbeaver.ext.postgresql.ui.editors.PostgreLockEditor">
         </editor>
     </extension>
 
     <extension point="org.jkiss.dbeaver.dataSourceProvider">
-        <editorContribution editorId="org.jkiss.dbeaver.ext.postgresql.ui.editors.PostgreSessionEditor" category="connectionEditor" label="%editor.session_manager.name" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/sessions.png">
+        <editorContribution editorId="org.jkiss.dbeaver.ext.postgresql.ui.editors.PostgreSessionEditor" category="connectionEditor" label="%editor.session_manager.name" icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/sessions.svg">
             <supports dataSource="postgresql"/>
             <supports dataSource="greenplum"/>
             <supports dataSource="redshift"/>
@@ -317,7 +302,12 @@
     <extension point="org.eclipse.ui.preferencePages">
         <page category="org.jkiss.dbeaver.preferences.drivers" id="org.jkiss.dbeaver.preferences.postgresql.general" class="org.jkiss.dbeaver.ext.postgresql.ui.PrefPagePostgreSQL" name="PostgreSQL">
             <keywordReference id="org.jkiss.dbeaver.core.keyword.dbeaver"/>
+            <keywordReference id="org.jkiss.dbeaver.ext.postgresql.ui.keyword.pref.general"/>
         </page>
+    </extension>
+
+    <extension point="org.eclipse.ui.keywords">
+        <keyword id="org.jkiss.dbeaver.ext.postgresql.ui.keyword.pref.general" label="%keyword.org.jkiss.dbeaver.ext.postgresql.ui.keyword.pref.general.label"/>
     </extension>
     
     <!-- SQL Generators -->

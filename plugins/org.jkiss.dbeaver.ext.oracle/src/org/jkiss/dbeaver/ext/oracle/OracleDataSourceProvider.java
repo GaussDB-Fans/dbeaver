@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +24,10 @@ import org.jkiss.dbeaver.ext.oracle.model.OracleDataSource;
 import org.jkiss.dbeaver.ext.oracle.model.dict.OracleConnectionType;
 import org.jkiss.dbeaver.ext.oracle.oci.OCIUtils;
 import org.jkiss.dbeaver.ext.oracle.oci.OracleHomeDescriptor;
-import org.jkiss.dbeaver.model.*;
+import org.jkiss.dbeaver.model.DBPDataSourceContainer;
+import org.jkiss.dbeaver.model.DBPInformationProvider;
+import org.jkiss.dbeaver.model.DBPObject;
+import org.jkiss.dbeaver.model.DatabaseURL;
 import org.jkiss.dbeaver.model.access.DBAUserCredentialsProvider;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
 import org.jkiss.dbeaver.model.connection.DBPDriver;
@@ -42,13 +44,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class OracleDataSourceProvider extends JDBCDataSourceProvider implements
+public class OracleDataSourceProvider extends JDBCDataSourceProvider<OracleDataSource> implements
     DBAUserCredentialsProvider,
     DBPNativeClientLocationManager,
     DBPInformationProvider {
 
-    public OracleDataSourceProvider()
-    {
+    public OracleDataSourceProvider() {
+        super(OracleDataSource.class);
+    }
+
+    protected OracleDataSourceProvider(@NotNull Class<? extends OracleDataSource> dsClass) {
+        super(dsClass);
     }
 
     @Override
@@ -57,18 +63,18 @@ public class OracleDataSourceProvider extends JDBCDataSourceProvider implements
         return FEATURE_SCHEMAS;
     }
 
+    @NotNull
     @Override
-    public String getConnectionURL(DBPDriver driver, DBPConnectionConfiguration connectionInfo)
-    {
+    public String getConnectionURL(@NotNull DBPDriver driver, @NotNull DBPConnectionConfiguration connectionInfo) throws DBException {
         //boolean isOCI = OCIUtils.isOciDriver(driver);
-        OracleConstants.ConnectionType connectionType = getConnectionType(connectionInfo);
-        if (connectionType == OracleConstants.ConnectionType.CUSTOM) {
+        String connectionType = getConnectionType(connectionInfo);
+        if (OracleConstants.ConnectionType.CUSTOM.equals(connectionType)) {
             return DatabaseURL.generateUrlByTemplate(connectionInfo.getUrl(), connectionInfo);
         }
         StringBuilder url = new StringBuilder(100);
         url.append("jdbc:oracle:thin:@"); //$NON-NLS-1$
         String databaseName = CommonUtils.notEmpty(connectionInfo.getDatabaseName());
-        if (connectionType == OracleConstants.ConnectionType.TNS) {
+        if (OracleConstants.ConnectionType.TNS.equals(connectionType)) {
             // TNS name specified
             // Try to get description from TNSNAMES
             File oraHomePath;
@@ -123,20 +129,15 @@ public class OracleDataSourceProvider extends JDBCDataSourceProvider implements
     }
 
     @NotNull
-    private OracleConstants.ConnectionType getConnectionType(DBPConnectionConfiguration connectionInfo) {
-        OracleConstants.ConnectionType connectionType;
-        String conTypeProperty = connectionInfo.getProviderProperty(OracleConstants.PROP_CONNECTION_TYPE);
-        if (conTypeProperty != null) {
-            connectionType = OracleConstants.ConnectionType.valueOf(CommonUtils.toString(conTypeProperty));
-        } else {
-            connectionType = OracleConstants.ConnectionType.BASIC;
-        }
-        return connectionType;
+    private String getConnectionType(DBPConnectionConfiguration connectionInfo) {
+        return OracleConstants.ConnectionType.fromString(
+            connectionInfo.getProviderProperty(OracleConstants.PROP_CONNECTION_TYPE)
+        );
     }
 
     @NotNull
     @Override
-    public DBPDataSource openDataSource(
+    public OracleDataSource openDataSource(
         @NotNull DBRProgressMonitor monitor, @NotNull DBPDataSourceContainer container)
         throws DBException
     {
@@ -218,17 +219,22 @@ public class OracleDataSourceProvider extends JDBCDataSourceProvider implements
     @Nullable
     @Override
     public String getObjectInformation(@NotNull DBPObject object, @NotNull String infoType) {
-        if (object instanceof DBPDataSourceContainer && infoType.equals(INFO_TARGET_ADDRESS)) {
-            DBPConnectionConfiguration connectionInfo = ((DBPDataSourceContainer) object).getConnectionConfiguration();
-            OracleConstants.ConnectionType connectionType = getConnectionType(connectionInfo);
-            if (connectionType == OracleConstants.ConnectionType.CUSTOM) {
-                return DatabaseURL.generateUrlByTemplate(connectionInfo.getUrl(), connectionInfo);
+        if (object instanceof DBPDataSourceContainer ds && infoType.equals(INFO_TARGET_ADDRESS)) {
+            DBPConnectionConfiguration connectionInfo = ds.getConnectionConfiguration();
+            String connectionType = getConnectionType(connectionInfo);
+            if (OracleConstants.ConnectionType.CUSTOM.equals(connectionType)) {
+                try {
+                    return this.getConnectionURL(ds.getDriver(), connectionInfo);
+                } catch (DBException e) {
+                    log.error("Failed to obtain object information on target address of the oracle datasource container", e);
+                    return null;
+                }
             }
             String databaseName = CommonUtils.notEmpty(connectionInfo.getDatabaseName());
-            if (connectionType == OracleConstants.ConnectionType.TNS) {
+            if (OracleConstants.ConnectionType.TNS.equals(connectionType)) {
                 return databaseName;
             } else {
-                String hostName = DBWUtils.getTargetTunnelHostName(connectionInfo);
+                String hostName = DBWUtils.getTargetTunnelHostName(ds, connectionInfo);
                 String hostPort = connectionInfo.getHostPort();
                 if (CommonUtils.isEmpty(hostName)) {
                     return null;

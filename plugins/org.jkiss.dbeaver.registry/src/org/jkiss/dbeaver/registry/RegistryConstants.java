@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ public class RegistryConstants {
     public static final String TAG_TYPES = "types"; //$NON-NLS-1$
     public static final String TAG_TYPE = "type"; //$NON-NLS-1$
     public static final String TAG_DATASOURCE = "datasource"; //$NON-NLS-1$
+    public static final String TAG_DATASOURCE_TYPE = "dataSourceType"; //$NON-NLS-1$
     public static final String TAG_DATASOURCE_PATCH = "datasourcePatch"; //$NON-NLS-1$
     public static final String TAG_DATASOURCE_ORIGIN = "datasourceOrigin"; //$NON-NLS-1$
     public static final String TAG_DRIVER_SUBSTITUTION = "driverSubstitution"; //$NON-NLS-1$
@@ -75,6 +76,7 @@ public class RegistryConstants {
     public static final String ATTR_ENABLED = "enabled"; //$NON-NLS-1$
     public static final String ATTR_DRIVER = "driver"; //$NON-NLS-1$
     public static final String ATTR_BUNDLE = "bundle"; //$NON-NLS-1$
+    public static final String ATTR_PREFERENCE_KEY = "preferenceKey"; //$NON-NLS-1$
 
     public static final String ATTR_CODE = "code"; //$NON-NLS-1$
     public static final String ATTR_LABEL = "label"; //$NON-NLS-1$
@@ -104,6 +106,7 @@ public class RegistryConstants {
     public static final String ATTR_ICON_BIG = "iconBig"; //$NON-NLS-1$
     public static final String ATTR_STANDARD = "standard"; //$NON-NLS-1$
     public static final String ATTR_COLOR = "color"; //$NON-NLS-1$
+    public static final String ATTR_COLOR_DARK = "colorDark"; //$NON-NLS-1$
     public static final String ATTR_KEEP_ALIVE = "keepAlive"; //$NON-NLS-1$
     public static final String ATTR_CLOSE_IDLE_ENABLED = "closeIdleConnection";
     public static final String ATTR_CLOSE_IDLE = "closeIdle";
@@ -126,11 +129,13 @@ public class RegistryConstants {
     public static final String ATTR_IGNORE_ERRORS = "ignoreErrors"; //$NON-NLS-1$
     public static final String ATTR_DIALECT = "dialect"; //$NON-NLS-1$
     public static final String ATTR_REQUIRES_MUTABILITY = "requiresMutability"; //$NON-NLS-1$
+    public static final String ATTR_REQUIRES_EXPORT_PRIVILEGES = "requiresExportPrivileges"; //$NON-NLS-1$
 
     public static final String ATTR_TARGET_ID = "targetID"; //$NON-NLS-1$
     public static final String ATTR_TYPE = "type"; //$NON-NLS-1$
     public static final String ATTR_OS = "os"; //$NON-NLS-1$
     public static final String ATTR_ARCH = "arch"; //$NON-NLS-1$
+    public static final String ATTR_EXCLUDE = "exclude"; //$NON-NLS-1$
     public static final String ATTR_MAIN = "main"; //$NON-NLS-1$
     public static final String ATTR_POSITION = "position"; //$NON-NLS-1$
     public static final String ATTR_OBJECT_TYPE = "objectType"; //$NON-NLS-1$
@@ -138,6 +143,8 @@ public class RegistryConstants {
     public static final String ATTR_SOURCE_TYPE = "sourceType"; //$NON-NLS-1$
     public static final String ATTR_EMBEDDABLE = "embeddable"; //$NON-NLS-1$
     public static final String ATTR_DATA_SOURCE = "dataSource"; //$NON-NLS-1$
+    public static final String ATTR_DATA_SOURCE_TYPE = "dataSourceType"; //$NON-NLS-1$
+    public static final String ATTR_DATA_SOURCE_INFORMATION = "dataSourceInformation"; //$NON-NLS-1$
     public static final String ATTR_AUTH_MODEL = "auth-model"; //$NON-NLS-1$
 
     public static final String TAG_FOLDER = "folder"; //$NON-NLS-1$
@@ -165,7 +172,7 @@ public class RegistryConstants {
     public static final String ATTR_EDITOR = "editor"; //$NON-NLS-1$
     public static final String ATTR_IF = "if"; //$NON-NLS-1$
     public static final String ATTR_DEFAULT = "default"; //$NON-NLS-1$
-    public static final String ATTR_MANAGABLE = "managable"; //$NON-NLS-1$
+    public static final String ATTR_MANAGEABLE = "managable"; //$NON-NLS-1$ FIXME: Historical type
     public static final String ATTR_CONTRIBUTOR = "contributor"; //$NON-NLS-1$
     public static final String ATTR_INPUT_FACTORY = "inputFactory"; //$NON-NLS-1$
 
@@ -194,7 +201,6 @@ public class RegistryConstants {
     public static final String ATTR_LOGIN_DATE = "login-date"; //$NON-NLS-1$
     public static final String ATTR_SAVE_PASSWORD = "save-password"; //$NON-NLS-1$
     public static final String ATTR_SHARED_CREDENTIALS = "shared-credentials"; //$NON-NLS-1$
-    public static final String ATTR_TEMPLATE = "template"; //$NON-NLS-1$
 
     public static final String ATTR_READ_ONLY = "read-only"; //$NON-NLS-1$
     public static final String ATTR_FILTER_CATALOG = "filter-catalog"; //$NON-NLS-1$

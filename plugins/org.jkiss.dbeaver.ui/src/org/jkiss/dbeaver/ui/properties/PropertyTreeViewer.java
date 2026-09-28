@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,13 +32,10 @@ import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
-import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.themes.ITheme;
 import org.eclipse.ui.views.properties.IPropertySource2;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -52,10 +49,7 @@ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.runtime.properties.*;
-import org.jkiss.dbeaver.ui.DefaultViewerToolTipSupport;
-import org.jkiss.dbeaver.ui.UIElementAlignment;
-import org.jkiss.dbeaver.ui.UIFonts;
-import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.*;
 import org.jkiss.dbeaver.ui.controls.ObjectViewerRenderer;
 import org.jkiss.dbeaver.ui.controls.bool.BooleanMode;
 import org.jkiss.dbeaver.ui.controls.bool.BooleanStyleDecorator;
@@ -69,8 +63,8 @@ import org.jkiss.utils.CommonUtils;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.text.Collator;
-import java.util.List;
 import java.util.*;
+import java.util.List;
 
 /**
  * Driver properties control
@@ -94,18 +88,17 @@ public class PropertyTreeViewer extends TreeViewer {
     private boolean isMouseEventOnMacos = false; // [#10279] [#10366] [#10361]
     private TreeEditor treeEditor;
 
-    private Font boldFont;
     private int selectedColumn = -1;
     private CellEditor curCellEditor;
-    private DBPPropertyDescriptor selectedProperty;
+    private CellEditorListener curCellEditorListener;
 
     private String[] customCategories;
     private IBaseLabelProvider extraLabelProvider;
-    private ObjectViewerRenderer renderer;
+    private final ObjectViewerRenderer renderer;
     private ExpandMode expandMode = ExpandMode.ALL;
 
     private final List<IPropertyChangeListener> propertyListeners = new ArrayList<>();
-    private final IPropertyChangeListener themeChangeListener;
+    private final List<Runnable> editorValueChangeListeners = new ArrayList<>();
 
     public PropertyTreeViewer(Composite parent, int style)
     {
@@ -185,7 +178,7 @@ public class PropertyTreeViewer extends TreeViewer {
                     DBWorkbench.getPlatformUI().openEntityEditor((DBSObject) cellValue);
                 } else {
                     String url = CommonUtils.toString(cellValue);
-                    if (url != null && url.contains("://")) {
+                    if (url.contains("://")) {
                         UIUtils.openWebBrowser(url);
                     }
                 }
@@ -198,13 +191,14 @@ public class PropertyTreeViewer extends TreeViewer {
             }
         };
 
-        this.themeChangeListener = e -> {
-            final ITheme theme = PlatformUI.getWorkbench().getThemeManager().getCurrentTheme();
-            boldFont = theme.getFontRegistry().getBold(UIFonts.DBEAVER_FONTS_MAIN_FONT);
-            getControl().setFont(theme.getFontRegistry().get(UIFonts.DBEAVER_FONTS_MAIN_FONT));
-            refresh();
-        };
-        this.themeChangeListener.propertyChange(null);
+        BaseThemeSettings.instance.addPropertyListener(
+            UIFonts.Eclipse.TREE_AND_TABLE_FONT_FOR_VIEWS,
+            s -> {
+                getControl().setFont(BaseThemeSettings.instance.treeAndTableFont);
+                refresh();
+            },
+            treeControl
+        );
         treeControl.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseDoubleClick(MouseEvent e) {
@@ -221,9 +215,6 @@ public class PropertyTreeViewer extends TreeViewer {
                 }
             }
         });
-
-        PlatformUI.getWorkbench().getThemeManager().addPropertyChangeListener(themeChangeListener);
-        getControl().addDisposeListener(e -> PlatformUI.getWorkbench().getThemeManager().removePropertyChangeListener(themeChangeListener));
     }
 
     public boolean isNamesEditable() {
@@ -242,18 +233,20 @@ public class PropertyTreeViewer extends TreeViewer {
         this.newPropertiesAllowed = newPropertiesAllowed;
     }
 
-    public void loadProperties(DBPPropertySource propertySource)
+    public void loadProperties(@NotNull DBPPropertySource propertySource)
     {
         loadProperties(null, null, propertySource);
     }
 
-    public void loadProperties(DBRProgressMonitor monitor, DBPPropertySource propertySource)
-    {
+    public void loadProperties(@NotNull DBRProgressMonitor monitor, @NotNull DBPPropertySource propertySource) {
         loadProperties(monitor, null, propertySource);
     }
 
-    protected void loadProperties(@Nullable DBRProgressMonitor monitor, TreeNode parent, DBPPropertySource propertySource)
-    {
+    protected void loadProperties(
+        @Nullable DBRProgressMonitor monitor,
+        @Nullable TreeNode parent,
+        @NotNull DBPPropertySource propertySource
+    ) {
         // Make tree model
         customCategories = getCustomCategories();
 
@@ -298,8 +291,7 @@ public class PropertyTreeViewer extends TreeViewer {
                         break;
                     case FIRST:
                         Object root = getInput();
-                        if (root instanceof Collection) {
-                            Collection<?> rootItems = (Collection<?>) root;
+                        if (root instanceof Collection<?> rootItems) {
                             if (!rootItems.isEmpty()) {
                                 Object first = rootItems.iterator().next();
                                 PropertyTreeViewer.this.collapseAll();
@@ -342,15 +334,20 @@ public class PropertyTreeViewer extends TreeViewer {
         }
     }
 
-    private Map<String, TreeNode> loadTreeNodes(@Nullable DBRProgressMonitor monitor, TreeNode parent, DBPPropertySource propertySource)
-    {
+    private Map<String, TreeNode> loadTreeNodes(
+        @Nullable DBRProgressMonitor monitor,
+        @Nullable TreeNode parent,
+        @NotNull DBPPropertySource propertySource
+    ) {
         Map<String, TreeNode> categories = new LinkedHashMap<>();
         TreeNode lastCategory = null;
         final DBPPropertyDescriptor[] props = filterProperties(propertySource.getEditableValue(), propertySource.getProperties());
         for (DBPPropertyDescriptor prop : props) {
-            if (prop instanceof ObjectPropertyDescriptor) {
+            if (prop instanceof ObjectPropertyDescriptor opd) {
                 Object propertyValue = propertySource.getPropertyValue(monitor, prop.getId());
-                if (!((ObjectPropertyDescriptor) prop).isPropertyVisible(propertySource.getEditableValue(), propertyValue)) {
+                if ((propertyValue == null && opd.isOptional()) ||
+                    !opd.isPropertyVisible(propertySource.getEditableValue(), propertyValue)
+                ) {
                     // Skip non-visible properties
                     continue;
                 }
@@ -406,7 +403,8 @@ public class PropertyTreeViewer extends TreeViewer {
         return categories;
     }
 
-    protected DBPPropertyDescriptor[] filterProperties(Object object, DBPPropertyDescriptor[] properties) {
+    @NotNull
+    protected DBPPropertyDescriptor[] filterProperties(@NotNull Object object, @NotNull DBPPropertyDescriptor[] properties) {
         return properties;
     }
 
@@ -415,10 +413,8 @@ public class PropertyTreeViewer extends TreeViewer {
         super.setInput(null);
     }
 
-    protected void addProperty(Object node, DBPPropertyDescriptor property, boolean update)
-    {
-        if (node instanceof TreeNode) {
-            TreeNode treeNode = (TreeNode) node;
+    protected void addProperty(Object node, @NotNull DBPPropertyDescriptor property, boolean update) {
+        if (node instanceof TreeNode treeNode) {
             while (treeNode.property != null) {
                 treeNode = treeNode.parent;
             }
@@ -429,12 +425,10 @@ public class PropertyTreeViewer extends TreeViewer {
         }
     }
 
-    protected void removeProperty(Object node)
-    {
+    protected void removeProperty(Object node) {
         applyEditorValue();
         disposeOldEditor();
-        if (node instanceof TreeNode) {
-            TreeNode treeNode = (TreeNode) node;
+        if (node instanceof TreeNode treeNode) {
             if (treeNode.propertySource != null) {
                 treeNode.propertySource.resetPropertyValueToDefault(treeNode.property.getId());
             }
@@ -450,16 +444,29 @@ public class PropertyTreeViewer extends TreeViewer {
         super.refresh();
     }
 
-    private void disposeOldEditor()
-    {
-        if (curCellEditor != null) {
-            curCellEditor.deactivate();
-            curCellEditor.dispose();
-            curCellEditor = null;
-            selectedProperty = null;
+    private void disposeOldEditor() {
+        CellEditor cellEditor = curCellEditor;
+        curCellEditor = null;
+        curCellEditorListener = null;
+        if (cellEditor != null) {
+            cellEditor.deactivate();
+            cellEditor.dispose();
         }
         Control oldEditor = treeEditor.getEditor();
-        if (oldEditor != null) oldEditor.dispose();
+        if (oldEditor != null) {
+            oldEditor.dispose();
+        }
+    }
+
+    private void applyOldEditorValue() {
+        CellEditor cellEditor = curCellEditor;
+        CellEditorListener cellEditorListener = curCellEditorListener;
+        if (cellEditor != null && cellEditorListener != null) {
+            cellEditor.deactivate();
+            if (cellEditor == curCellEditor) {
+                cellEditorListener.applyEditorValue();
+            }
+        }
     }
 
     private void registerEditor()
@@ -507,8 +514,7 @@ public class PropertyTreeViewer extends TreeViewer {
                         TreeItem[] allItems = treeControl.getItems();
                         if (allItems.length > 0) {
                             TreeItem lastItem = allItems[allItems.length - 1];
-                            if (lastItem.getData() instanceof TreeNode) {
-                                TreeNode lastNode = (TreeNode) lastItem.getData();
+                            if (lastItem.getData() instanceof TreeNode lastNode) {
                                 if (!CommonUtils.isEmpty(lastNode.children)) {
                                     lastNode = lastNode.children.get(lastNode.children.size() - 1);
                                 }
@@ -548,16 +554,15 @@ public class PropertyTreeViewer extends TreeViewer {
     }
 
     private void showEditor(final TreeItem item, boolean isDef) {
-        // Clean up any previous editor control
+        applyOldEditorValue();
         disposeOldEditor();
         if (item == null) {
             return;
         }
 
         // Identify the selected row
-        if (item.getData() instanceof TreeNode) {
+        if (item.getData() instanceof TreeNode prop) {
             final Tree treeControl = super.getTree();
-            final TreeNode prop = (TreeNode) item.getData();
             if (prop.property == null || !prop.isEditable()) {
                 return;
             }
@@ -583,18 +588,22 @@ public class PropertyTreeViewer extends TreeViewer {
             }
             final Object propertyValue = columnIndex == 0 ? prop.property.getDisplayName() : prop.propertySource.getPropertyValue(null, prop.property.getId());
 
-            cellEditor.addListener(new CellEditorListener(cellEditor, columnIndex, prop));
+            CellEditorListener cellEditorListener = new CellEditorListener(cellEditor, columnIndex, prop);
+            cellEditor.addListener(cellEditorListener);
             if (propertyValue != null) {
                 cellEditor.setValue(UIUtils.normalizePropertyValue(propertyValue));
             }
             curCellEditor = cellEditor;
-            selectedProperty = prop.property;
+            curCellEditorListener = cellEditorListener;
 
             if (isDef) {
                 cellEditor.activate();
             }
             final Control editorControl = cellEditor.getControl();
             if (editorControl != null) {
+                Listener editorValueListener = e -> notifyEditorValueChangeListeners();
+                editorControl.addListener(SWT.Modify, editorValueListener);
+                editorControl.addListener(SWT.Selection, editorValueListener);
                 Control traverseControl = editorControl;
                 if (editorControl instanceof Composite) {
                     for (Control child : ((Composite) editorControl).getChildren()) {
@@ -670,8 +679,7 @@ public class PropertyTreeViewer extends TreeViewer {
                     return;
                 }
                 final Object object = selection.getFirstElement();
-                if (object instanceof TreeNode) {
-                    final TreeNode prop = (TreeNode) object;
+                if (object instanceof TreeNode prop) {
                     if (prop.property != null) {
                         manager.add(new Action(UIMessages.ui_properties_tree_viewer_action_copy_name) {
                             @Override
@@ -694,14 +702,10 @@ public class PropertyTreeViewer extends TreeViewer {
                                 }
                             });
                         }
-                        if (isPropertyChanged(prop) && prop.isEditable()) {
-                            if (prop.propertySource instanceof IPropertySource2 && !prop.propertySource.isPropertyResettable(prop.property.getId())) {
-                                // it is not resettable
-                            } else {
-                                manager.add(new ActionResetProperty(prop, false));
-                                if (!isCustomProperty(prop.property)) {
-                                    manager.add(new ActionResetProperty(prop, true));
-                                }
+                        if (canResetProperty(prop)) {
+                            manager.add(new ActionResetProperty(prop, false));
+                            if (!isCustomProperty(prop.property)) {
+                                manager.add(new ActionResetProperty(prop, true));
                             }
                         }
                     }
@@ -722,6 +726,18 @@ public class PropertyTreeViewer extends TreeViewer {
             getTree().setMenu(menu);
             getTree().addDisposeListener(e -> menuMgr.dispose());
         }
+    }
+
+    private boolean canResetProperty(@NotNull TreeNode prop) {
+        return isPropertyResettable(prop) && isPropertyChanged(prop);
+    }
+
+    private boolean isPropertyResettable(@NotNull TreeNode prop) {
+        if (prop.property == null || !prop.isEditable()) {
+            return false;
+        }
+        return !(prop.propertySource instanceof IPropertySource2) ||
+            prop.propertySource.isPropertyResettable(prop.property.getId());
     }
 
     private boolean isCustomProperty(DBPPropertyDescriptor property)
@@ -821,6 +837,26 @@ public class PropertyTreeViewer extends TreeViewer {
         }
     }
 
+    public void addEditorValueChangeListener(@NotNull Runnable listener) {
+        synchronized (editorValueChangeListeners) {
+            editorValueChangeListeners.add(listener);
+        }
+    }
+
+    public void removeEditorValueChangeListener(@NotNull Runnable listener) {
+        synchronized (editorValueChangeListeners) {
+            editorValueChangeListeners.remove(listener);
+        }
+    }
+
+    private void notifyEditorValueChangeListeners() {
+        List<Runnable> listeners;
+        synchronized (editorValueChangeListeners) {
+            listeners = new ArrayList<>(editorValueChangeListeners);
+        }
+        listeners.forEach(Runnable::run);
+    }
+
     public void setExpandMode(ExpandMode expandMode) {
         this.expandMode = expandMode;
     }
@@ -838,20 +874,41 @@ public class PropertyTreeViewer extends TreeViewer {
         ISelection selection = getSelection();
         if (selection instanceof IStructuredSelection) {
             Object element = ((IStructuredSelection) selection).getFirstElement();
-            if (element instanceof TreeNode) {
-                final TreeNode prop = (TreeNode) element;
+            if (element instanceof TreeNode prop) {
                 return prop.property;
             }
         }
         return null;
     }
 
+    public boolean canResetSelectedProperty() {
+        TreeNode node = getSelectedNode();
+        return (node != null && canResetProperty(node)) || isSelectedPropertyValueEdited(node);
+    }
+
+    private boolean isSelectedPropertyValueEdited(@Nullable TreeNode node) {
+        return node != null && curCellEditorListener != null && curCellEditorListener.prop == node &&
+            curCellEditorListener.columnIndex != 0 && curCellEditorListener.isValueChanged();
+    }
+
+    public void resetSelectedPropertyToDefault() {
+        TreeNode node = getSelectedNode();
+        if (node != null && isPropertyResettable(node)) {
+            new ActionResetProperty(node, true).run();
+        }
+    }
+
+    @Nullable
+    private TreeNode getSelectedNode() {
+        Object element = getStructuredSelection().getFirstElement();
+        return element instanceof TreeNode node ? node : null;
+    }
+
     public String getSelectedCategory() {
         ISelection selection = getSelection();
         if (selection instanceof IStructuredSelection) {
             Object element = ((IStructuredSelection) selection).getFirstElement();
-            if (element instanceof TreeNode) {
-                final TreeNode prop = (TreeNode) element;
+            if (element instanceof TreeNode prop) {
                 return prop.parent != null ? prop.parent.category : prop.category;
             }
         }
@@ -931,8 +988,7 @@ public class PropertyTreeViewer extends TreeViewer {
 
         @Override
         public boolean equals(Object obj) {
-            if (obj instanceof TreeNode) {
-                final TreeNode node = (TreeNode) obj;
+            if (obj instanceof TreeNode node) {
                 if (this == node) return true;
                 return
                     propertySource.getEditableValue() == node.propertySource.getEditableValue() &&
@@ -965,16 +1021,6 @@ public class PropertyTreeViewer extends TreeViewer {
     }
 
     static class PropsContentProvider implements IStructuredContentProvider, ITreeContentProvider {
-        @Override
-        public void inputChanged(Viewer v, Object oldInput, Object newInput)
-        {
-        }
-
-        @Override
-        public void dispose()
-        {
-        }
-
         @Override
         public Object[] getElements(Object parent)
         {
@@ -1021,10 +1067,9 @@ public class PropertyTreeViewer extends TreeViewer {
 
         public String getText(Object obj, int columnIndex)
         {
-            if (!(obj instanceof TreeNode)) {
+            if (!(obj instanceof TreeNode node)) {
                 return ""; //$NON-NLS-1$
             }
-            TreeNode node = (TreeNode) obj;
             if (columnIndex == 0) {
                 if (node.category != null) {
                     return node.category;
@@ -1079,8 +1124,7 @@ public class PropertyTreeViewer extends TreeViewer {
 
         @Nullable
         public Color getForeground(Object obj, int columnIndex) {
-            if (obj instanceof TreeNode && columnIndex > 0) {
-                TreeNode node = (TreeNode) obj;
+            if (obj instanceof TreeNode node && columnIndex > 0) {
                 if (node.property != null) {
                     Object propertyValue = getPropertyValue(node);
                     Class<?> propertyDataType = node.property.getDataType();
@@ -1102,10 +1146,9 @@ public class PropertyTreeViewer extends TreeViewer {
         @Override
         public String getToolTipText(Object obj)
         {
-            if (!(obj instanceof TreeNode)) {
+            if (!(obj instanceof TreeNode node)) {
                 return null; //$NON-NLS-1$
             }
-            TreeNode node = (TreeNode) obj;
             String toolTip;
             if (node.category != null) {
                 toolTip = node.category;
@@ -1160,17 +1203,17 @@ public class PropertyTreeViewer extends TreeViewer {
                     } else {
                         int spaceToWrapAt = str.lastIndexOf(32, wrapLength + offset);
                         if (spaceToWrapAt >= offset) {
-                            wrappedLine.append(str.substring(offset, spaceToWrapAt));
+                            wrappedLine.append(str, offset, spaceToWrapAt);
                             wrappedLine.append(newLineStr);
                             offset = spaceToWrapAt + 1;
                         } else if (wrapLongWords) {
-                            wrappedLine.append(str.substring(offset, wrapLength + offset));
+                            wrappedLine.append(str, offset, wrapLength + offset);
                             wrappedLine.append(newLineStr);
                             offset += wrapLength;
                         } else {
                             spaceToWrapAt = str.indexOf(32, wrapLength + offset);
                             if (spaceToWrapAt >= 0) {
-                                wrappedLine.append(str.substring(offset, spaceToWrapAt));
+                                wrappedLine.append(str, offset, spaceToWrapAt);
                                 wrappedLine.append(newLineStr);
                                 offset = spaceToWrapAt + 1;
                             } else {
@@ -1198,10 +1241,9 @@ public class PropertyTreeViewer extends TreeViewer {
             Object element = cell.getElement();
             cell.setText(getText(element, cell.getColumnIndex()));
             cell.setForeground(getForeground(element, cell.getColumnIndex()));
-            if (!(element instanceof TreeNode)) {
+            if (!(element instanceof TreeNode node)) {
                 return;
             }
-            TreeNode node = (TreeNode) element;
             boolean changed = false;
             if (node.property != null) {
                 changed = node.isEditable() && isPropertyChanged(node);
@@ -1210,7 +1252,7 @@ public class PropertyTreeViewer extends TreeViewer {
                 cell.setFont(((IFontProvider) extraLabelProvider).getFont(node.property));
 
             } else if (changed) {
-                cell.setFont(boldFont);
+                cell.setFont(BaseThemeSettings.instance.treeAndTableFontBold);
             } else {
                 cell.setFont(null);
             }
@@ -1283,8 +1325,8 @@ public class PropertyTreeViewer extends TreeViewer {
         }
 
         @Override
-        public void run()
-        {
+        public void run() {
+            disposeOldEditor();
             if (prop.propertySource != null) {
                 if (toDefault) {
                     prop.propertySource.resetPropertyValueToDefault(prop.property.getId());
@@ -1294,7 +1336,6 @@ public class PropertyTreeViewer extends TreeViewer {
             }
             handlePropertyChange(prop);
             PropertyTreeViewer.this.update(prop, null);
-            disposeOldEditor();
         }
     }
 
@@ -1306,23 +1347,19 @@ public class PropertyTreeViewer extends TreeViewer {
             if (getTree().isDisposed()) {
                 return;
             }
-            switch (event.type) {
-                case SWT.PaintItem: {
-                    if (event.index == 1) {
-                        if (treeEditor != null && treeEditor.getItem() == event.item && treeEditor.getEditor() != null &&
-                            !treeEditor.getEditor().isDisposed() && treeEditor.getEditor().isVisible())
-                        {
-                            // Do not paint over active editor
-                            return;
-                        }
-                        final TreeNode node = (TreeNode) event.item.getData();
-                        if (node != null && node.property != null) {
-
-                            Object cellValue = renderer.getCellValue(node, event.index);
-                            renderer.paintCell(event, node, cellValue, event.item, node.property.getDataType(), event.index, node.isEditable(), (event.detail & SWT.SELECTED) == SWT.SELECTED);
-                        }
+            if (event.type == SWT.PaintItem) {
+                if (event.index == 1) {
+                    if (treeEditor != null && treeEditor.getItem() == event.item && treeEditor.getEditor() != null &&
+                        !treeEditor.getEditor().isDisposed() && treeEditor.getEditor().isVisible()) {
+                        // Do not paint over active editor
+                        return;
                     }
-                    break;
+                    final TreeNode node = (TreeNode) event.item.getData();
+                    if (node != null && node.property != null) {
+
+                        Object cellValue = renderer.getCellValue(node, event.index);
+                        renderer.paintCell(event, node, cellValue, event.item, node.property.getDataType(), event.index, node.isEditable(), (event.detail & SWT.SELECTED) == SWT.SELECTED);
+                    }
                 }
             }
         }
@@ -1342,15 +1379,15 @@ public class PropertyTreeViewer extends TreeViewer {
         @Override
         public void applyEditorValue()
         {
+            if (cellEditor != curCellEditor) {
+                return;
+            }
             try {
                 //editorValueChanged(true, true);
                 final Object value = cellEditor.getValue();
                 final Object oldValue = columnIndex == 0 ? prop.property.getDisplayName() : prop.propertySource.getPropertyValue(null, prop.property.getId());
-                if (value instanceof String && ((String) value).isEmpty() && oldValue == null) {
-                    // The same empty string
-                    return;
-                }
-                if (DBUtils.compareDataValues(oldValue, value) != 0) {
+                boolean unchangedEmptyValue = value instanceof String && ((String) value).isEmpty() && oldValue == null;
+                if (!unchangedEmptyValue && DBUtils.compareDataValues(oldValue, value) != 0) {
                     if (columnIndex == 0) {
                         String newName = CommonUtils.toString(value);
                         String oldPropId = prop.property.getId();
@@ -1368,17 +1405,30 @@ public class PropertyTreeViewer extends TreeViewer {
                     }
                     handlePropertyChange(prop);
                 }
-
-                disposeOldEditor();
             } catch (Exception e) {
                 DBWorkbench.getPlatformUI().showError("Error setting property value", "Error setting property '" + prop.property.getDisplayName() + "' value", e);
+            } finally {
+                if (cellEditor == curCellEditor) {
+                    disposeOldEditor();
+                }
             }
+        }
+
+        private boolean isValueChanged() {
+            Object value = cellEditor.getValue();
+            Object oldValue = columnIndex == 0 ?
+                prop.property.getDisplayName() :
+                prop.propertySource.getPropertyValue(null, prop.property.getId());
+            boolean unchangedEmptyValue = value instanceof String string && string.isEmpty() && oldValue == null;
+            return !unchangedEmptyValue && DBUtils.compareDataValues(oldValue, value) != 0;
         }
 
         @Override
         public void cancelEditor()
         {
-            disposeOldEditor();
+            if (cellEditor == curCellEditor) {
+                disposeOldEditor();
+            }
         }
 
         @Override

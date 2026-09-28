@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.eclipse.jface.action.IContributionManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.viewers.Viewer;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.exec.plan.DBCPlan;
 import org.jkiss.dbeaver.model.exec.plan.DBCQueryPlanner;
 import org.jkiss.dbeaver.model.exec.plan.DBCQueryPlannerSerializable;
@@ -31,11 +32,11 @@ import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.dialogs.DialogUtils;
 import org.jkiss.dbeaver.utils.GeneralUtils;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public abstract class SQLPlanSaveProvider implements SQLPlanViewProvider {
 
@@ -46,7 +47,7 @@ public abstract class SQLPlanSaveProvider implements SQLPlanViewProvider {
     private SQLQuery query;
     private DBCPlan plan;
 
-    private SaveAction saveAction;
+    private final SaveAction saveAction;
 
     private DBCQueryPlanner planner;
 
@@ -59,22 +60,23 @@ public abstract class SQLPlanSaveProvider implements SQLPlanViewProvider {
     protected void doSave() {
         if (query != null) {
 
-            if (planner instanceof DBCQueryPlannerSerializable) {
-                final File filePath = DialogUtils.selectFileForSave(viewer.getControl().getShell(), "Save execution plan as", EXT, NAMES, null);
+            if (planner instanceof DBCQueryPlannerSerializable qps) {
+                Path filePath = DialogUtils.selectFileForSave(
+                    viewer.getControl().getShell(),
+                    "Save execution plan as",
+                    EXT,
+                    NAMES,
+                    null
+                );
                 if (filePath == null) {
                     return;
                 }
 
-                try (Writer w = new FileWriter(filePath)) {
-
-                    ((DBCQueryPlannerSerializable) planner).serialize(w, plan);
-
+                try (Writer w = Files.newBufferedWriter(filePath)) {
+                    qps.serialize(w, plan);
                 } catch (IOException | InvocationTargetException e) {
-
                     DBWorkbench.getPlatformUI().showError("Load plan", "Error loading plan", e);
-
                 }
-
             } else {
                 saveAction.setEnabled(false);
             }
@@ -88,7 +90,12 @@ public abstract class SQLPlanSaveProvider implements SQLPlanViewProvider {
     }
 
     @Override
-    public void contributeActions(Viewer viewer, IContributionManager contributionManager, SQLQuery lastQuery, DBCPlan lastPlan) {
+    public void contributeActions(
+        @NotNull Viewer viewer,
+        @NotNull IContributionManager contributionManager,
+        @NotNull SQLQuery lastQuery,
+        @NotNull DBCPlan lastPlan
+    ) {
         this.viewer = viewer;
 
         if (saveAction.isEnabled()) {

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,7 @@ public class EditorsMessages extends NLS {
     public static String dialog_morph_delimited_target_group_leading_text;
     public static String dialog_morph_delimited_target_group_trailing_text;
 
-    public static String database_editor_command_save_name;
     public static String database_editor_command_save_tip;
-    public static String database_editor_command_revert_name;
     public static String database_editor_command_revert_tip;
     public static String database_editor_command_refresh_name;
     public static String database_editor_command_refresh_tip;
@@ -50,6 +48,7 @@ public class EditorsMessages extends NLS {
     public static String progress_editor_uninitialized_text;
 
     public static String lazy_editor_input_cant_find_node;
+    public static String dialog_file_type_selector_title;
 
     static {
         // initialize resource bundle

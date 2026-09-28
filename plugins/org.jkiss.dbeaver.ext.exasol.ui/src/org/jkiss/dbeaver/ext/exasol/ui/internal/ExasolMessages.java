@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2016 Karl Griesser (fullref@gmail.com)
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,7 +52,6 @@ public class ExasolMessages extends NLS {
 	public static String edit_exasol_constraint_manager_dialog_title;
 
 	public static String dialog_table_tools_progress;
-	public static String dialog_table_tools_success_title;
 	public static String dialog_table_open_input_directory;
 	public static String dialog_table_open_output_directory;
 	public static String dialog_table_tools_export_title;
@@ -71,9 +69,6 @@ public class ExasolMessages extends NLS {
 	public static String editors_exasol_session_editor_action_kill;
 	public static String editors_exasol_session_editor_confirm_action;
 	public static String editors_exasol_session_editor_title_kill_session_statement;
-
-	public static String exasol_partition_name;
-	public static String exasol_partition_description;
 	public static String label_backup_host_list;
 	public static String label_database;
 	public static String label_encrypt;

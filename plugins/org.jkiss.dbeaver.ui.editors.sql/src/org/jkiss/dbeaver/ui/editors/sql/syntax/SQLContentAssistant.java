@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,19 @@
  */
 package org.jkiss.dbeaver.ui.editors.sql.syntax;
 
+import org.eclipse.jface.text.DocumentEvent;
+import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.text.IDocumentListener;
+import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.text.ITextViewer;
+import org.eclipse.jface.text.ITextViewerExtension;
+import org.eclipse.jface.text.contentassist.ContentAssistEvent;
 import org.eclipse.jface.text.contentassist.ContentAssistant;
+import org.eclipse.jface.viewers.ISelectionChangedListener;
+import org.eclipse.jface.viewers.ISelectionProvider;
+import org.eclipse.swt.custom.VerifyKeyListener;
+import org.jkiss.code.NotNull;
+import org.jkiss.dbeaver.ui.contentassist.ContentAssistUtils.ProposalActivationKey;
 import org.jkiss.dbeaver.ui.editors.sql.SQLEditorBase;
 import org.jkiss.dbeaver.ui.editors.sql.SQLEditorUtils;
 import org.jkiss.dbeaver.ui.editors.sql.SQLPreferenceConstants;
@@ -25,15 +37,135 @@ import org.jkiss.dbeaver.ui.editors.sql.SQLPreferenceConstants;
  * SQL Completion proposal
  */
 public class SQLContentAssistant extends ContentAssistant {
+
     private final SQLEditorBase editor;
 
-    public SQLContentAssistant(SQLEditorBase editor) {
+    private SQLCompletionSorterUI sorter;
+
+    private IDocument completionDocument;
+    private ISelectionProvider completionSelectionProvider;
+    private int completionRegionStart = -1;
+    private int completionRegionEnd = -1;
+    private ITextViewer installedTextViewer;
+
+    private final VerifyKeyListener proposalActivationKeyListener;
+
+    private final IDocumentListener completionDocumentListener = new IDocumentListener() {
+        @Override
+        public void documentAboutToBeChanged(DocumentEvent event) {
+            int changeStart = event.getOffset();
+            int changeEnd = changeStart + event.getLength();
+            if (changeStart < completionRegionStart ||
+                changeStart > completionRegionEnd ||
+                changeEnd > completionRegionEnd
+            ) {
+                hide();
+            } else {
+                completionRegionEnd += (event.getText() == null ? 0 : event.getText().length()) - event.getLength();
+            }
+        }
+
+        @Override
+        public void documentChanged(DocumentEvent event) {
+            // do nothing
+        }
+    };
+    private final ISelectionChangedListener completionSelectionListener = event -> {
+        if (event.getSelection() instanceof ITextSelection selection) {
+            int selectionStart = selection.getOffset();
+            int selectionEnd = selectionStart + selection.getLength();
+            if (selectionStart < completionRegionStart || selectionEnd > completionRegionEnd) {
+                hide();
+            }
+        }
+    };
+
+    public SQLContentAssistant(@NotNull SQLEditorBase editor) {
         super(); // Sync. Maybe we should make it async
         this.editor = editor;
+        this.proposalActivationKeyListener = event -> {
+            if (!isProposalPopupActive()) {
+                return;
+            }
+            var activationKey = ProposalActivationKey.fromPreferences(editor.getActivePreferenceStore());
+            boolean tabPressed = event.character == '\t' || event.keyCode == '\t';
+            boolean enterPressed = !tabPressed && (event.character == '\r' || event.character == '\n');
+            if (enterPressed && !activationKey.acceptsEnter() || tabPressed && !activationKey.acceptsTab()) {
+                hide();
+            }
+        };
         enableColoredLabels(true);
     }
 
     @Override
+    public void install(@NotNull ITextViewer textViewer) {
+        super.install(textViewer);
+        installedTextViewer = textViewer;
+        promoteProposalActivationKeyListener();
+    }
+
+    private void promoteProposalActivationKeyListener() {
+        if (installedTextViewer instanceof ITextViewerExtension textViewerExtension) {
+            textViewerExtension.removeVerifyKeyListener(proposalActivationKeyListener);
+            textViewerExtension.prependVerifyKeyListener(proposalActivationKeyListener);
+        }
+    }
+
+    public void assistSessionStarted(@NotNull ContentAssistEvent event) {
+        promoteProposalActivationKeyListener();
+        if (this.sorter != null) {
+            this.sorter.refreshSettings();
+        }
+    }
+
+    @Override
+    public void uninstall() {
+        if (installedTextViewer instanceof ITextViewerExtension textViewerExtension) {
+            textViewerExtension.removeVerifyKeyListener(proposalActivationKeyListener);
+        }
+        installedTextViewer = null;
+        super.uninstall();
+    }
+
+    public void setCompletionRegionOffset(int offset) {
+        clearCompletionRegion();
+        IDocument document = this.editor.getDocument();
+        if (document == null) {
+            return;
+        }
+
+        this.completionDocument = document;
+        this.completionRegionStart = offset;
+        this.completionRegionEnd = offset;
+        this.completionDocument.addDocumentListener(this.completionDocumentListener);
+        if (this.editor.getTextViewer() != null) {
+            this.completionSelectionProvider = this.editor.getTextViewer().getSelectionProvider();
+            if (this.completionSelectionProvider != null) {
+                this.completionSelectionProvider.addSelectionChangedListener(this.completionSelectionListener);
+            }
+        }
+    }
+
+    public void clearCompletionRegion() {
+        if (this.completionDocument != null) {
+            this.completionDocument.removeDocumentListener(this.completionDocumentListener);
+            this.completionDocument = null;
+        }
+        if (this.completionSelectionProvider != null) {
+            this.completionSelectionProvider.removeSelectionChangedListener(this.completionSelectionListener);
+            this.completionSelectionProvider = null;
+        }
+        this.completionRegionStart = -1;
+        this.completionRegionEnd = -1;
+    }
+
+    public void setSorter(SQLCompletionSorterUI sorter) {
+        this.sorter = sorter;
+        super.setSorter(sorter);
+    }
+
+    @Override
+    @NotNull
     protected AutoAssistListener createAutoAssistListener() {
         return new SQLAutoAssistListener();
     }

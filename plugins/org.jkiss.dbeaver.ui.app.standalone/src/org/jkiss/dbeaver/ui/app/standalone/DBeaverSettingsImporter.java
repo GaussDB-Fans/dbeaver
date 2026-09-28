@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 package org.jkiss.dbeaver.ui.app.standalone;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
@@ -26,7 +25,9 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
 import org.eclipse.ui.internal.WorkbenchPlugin;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.DBConstants;
+import org.jkiss.dbeaver.model.rcp.DesktopApplicationImpl;
 import org.jkiss.dbeaver.model.runtime.BaseProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.utils.GeneralUtils;
@@ -44,8 +45,8 @@ class DBeaverSettingsImporter {
 
     private static final String[] COPY_PLUGINS = {
         "org.eclipse.compare",
-        "org.eclipse.core.resources",
-        "org.eclipse.core.runtime",
+        DesktopApplicationImpl.CORE_RESOURCES_PLUGIN_ID,
+        DesktopApplicationImpl.CORE_RUNTIME_PLUGIN_ID,
         "org.eclipse.e4.ui.workbench.swt",
         "org.eclipse.equinox.p2.ui",
         "org.eclipse.equinox.security.ui",
@@ -147,23 +148,18 @@ class DBeaverSettingsImporter {
             skipButton.setText("Do not migrate");
 
             migrateButton.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
-            migrateButton.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            migrateButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     migrateButton.setEnabled(false);
                     skipButton.setEnabled(false);
                     progressBar.setVisible(true);
                     ((GridData)progressBar.getLayoutData()).exclude = false;
                     windowShell.pack();
                     migrateWorkspace(oldDir, newDir);
-                }
-            });
+                }));
             windowShell.setDefaultButton(migrateButton);
 
             skipButton.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
-            skipButton.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            skipButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     MessageBox messageBox = new MessageBox(windowShell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
                     messageBox.setText("Skip workspace migration");
                     messageBox.setMessage("You will lose all previous configurations and scripts.\n\nAre you sure?");
@@ -172,8 +168,7 @@ class DBeaverSettingsImporter {
                         shellResult = SWT.IGNORE;
                         windowShell.dispose();
                     }
-                }
-            });
+                }));
         }
 
         progressLabel = new Label(windowShell, SWT.NONE);
@@ -209,7 +204,7 @@ class DBeaverSettingsImporter {
         final DBRProgressMonitor monitor = new BaseProgressMonitor() {
             long bytesProcessed = 0;
             @Override
-            public void subTask(final String name) {
+            public void subTask(@NotNull final String name) {
                 display.syncExec(() -> progressLabel.setText(name));
             }
             @Override
@@ -244,8 +239,8 @@ class DBeaverSettingsImporter {
         }).start();
     }
 
-    private int countWorkspaceFiles(File dir) {
-        int count = 1;
+    private long countWorkspaceFiles(File dir) {
+        long count = 1;
         final File[] files = dir.listFiles();
         if (files == null) {
             return count;

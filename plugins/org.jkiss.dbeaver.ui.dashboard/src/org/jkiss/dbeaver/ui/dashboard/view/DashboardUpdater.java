@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ import org.jkiss.dbeaver.ui.dashboard.control.DashboardListViewer;
 import org.jkiss.dbeaver.ui.dashboard.model.DashboardContainer;
 import org.jkiss.dbeaver.ui.dashboard.model.DashboardGroupContainer;
 import org.jkiss.dbeaver.ui.dashboard.model.DashboardItemContainer;
-import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
@@ -112,22 +111,18 @@ public class DashboardUpdater {
             }
             try {
                 DBExecUtils.tryExecuteRecover(dashboards, dataSource, param -> {
-                    try {
-                        for (MapQueryInfo mqi : mqEntry.getValue()) {
-                            if (!mqi.dashboard.isAutoUpdateEnabled()) {
-                                continue;
-                            }
-
-                            try {
-                                readMapQueryData(monitor, mqi);
-                            } catch (DBCException e) {
-                                log.debug("Datasource '" + mqi.dashboard.getDataSourceContainer().getName() + "' dashboard query failed. Stopping update of dashboard queries for this datasource.");
-                                mqi.dashboard.disableAutoUpdate();
-                                throw e;
-                            }
+                    for (MapQueryInfo mqi : mqEntry.getValue()) {
+                        if (!mqi.dashboard.isAutoUpdateEnabled()) {
+                            continue;
                         }
-                    } catch (Throwable e) {
-                        throw new InvocationTargetException(e);
+
+                        try {
+                            readMapQueryData(monitor, mqi);
+                        } catch (DBCException e) {
+                            log.debug("Datasource '" + mqi.dashboard.getDataSourceContainer().getName() + "' dashboard query failed. Stopping update of dashboard queries for this datasource.");
+                            mqi.dashboard.disableAutoUpdate();
+                            throw e;
+                        }
                     }
                 });
             } catch (DBException e) {
@@ -154,7 +149,7 @@ public class DashboardUpdater {
                     }
                 });
             } catch (DBException e) {
-                log.debug("Error reading dashboard '" + dashboard.getItemDescriptor().getId() + "' data: " + GeneralUtils.getRootCause(e).getMessage());
+                log.debug("Error reading dashboard '" + dashboard.getItemDescriptor().getId() + "' data: " + CommonUtils.getRootCause(e).getMessage());
             }
             monitor.worked(1);
         }

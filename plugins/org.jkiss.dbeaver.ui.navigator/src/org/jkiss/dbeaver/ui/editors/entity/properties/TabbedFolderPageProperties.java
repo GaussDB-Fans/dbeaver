@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,8 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.*;
 import org.eclipse.ui.progress.UIJob;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPEvent;
 import org.jkiss.dbeaver.model.DBPEventListener;
 import org.jkiss.dbeaver.model.DBUtils;
@@ -43,10 +45,7 @@ import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.runtime.properties.ILazyPropertyLoadListener;
 import org.jkiss.dbeaver.runtime.properties.PropertiesContributor;
-import org.jkiss.dbeaver.ui.IProgressControlProvider;
-import org.jkiss.dbeaver.ui.IRefreshablePart;
-import org.jkiss.dbeaver.ui.ISearchExecutor;
-import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.*;
 import org.jkiss.dbeaver.ui.controls.ProgressPageControl;
 import org.jkiss.dbeaver.ui.controls.folders.TabbedFolderPage;
 import org.jkiss.dbeaver.ui.editors.DatabaseEditorUtils;
@@ -65,12 +64,11 @@ public class TabbedFolderPageProperties extends TabbedFolderPage implements IRef
 
     protected IWorkbenchPart part;
     protected IDatabaseEditorInput input;
-    private Font boldFont;
     private UIJob refreshJob = null;
     private PropertyTreeViewer propertyTree;
     private DBPPropertySource curPropertySource;
     private PropertiesPageControl progressControl;
-    private boolean attached;
+    private final boolean attached;
     private boolean activated;
 
     public TabbedFolderPageProperties(IWorkbenchPart part, IDatabaseEditorInput input) {
@@ -80,10 +78,7 @@ public class TabbedFolderPageProperties extends TabbedFolderPage implements IRef
     }
 
     @Override
-    public void createControl(Composite parent)
-    {
-        this.boldFont = UIUtils.makeBoldFont(parent.getFont());
-
+    public void createControl(Composite parent) {
         ProgressPageControl ownerProgressControl = null;
         if (this.part instanceof IProgressControlProvider) {
             ownerProgressControl = ((IProgressControlProvider) this.part).getProgressControl();
@@ -125,7 +120,6 @@ public class TabbedFolderPageProperties extends TabbedFolderPage implements IRef
             }
             curPropertySource = null;
         }
-        UIUtils.dispose(boldFont);
 		super.dispose();
 	}
 
@@ -140,7 +134,7 @@ public class TabbedFolderPageProperties extends TabbedFolderPage implements IRef
     }
 
     @Override
-    public void handleDataSourceEvent(DBPEvent event)
+    public void handleDataSourceEvent(@NotNull DBPEvent event)
     {
         if (input.getDatabaseObject() == event.getObject() && !Boolean.FALSE.equals(event.getEnabled()) && !propertyTree.getControl().isDisposed()) {
             refreshProperties();
@@ -249,13 +243,14 @@ public class TabbedFolderPageProperties extends TabbedFolderPage implements IRef
             });
         }
 
+        @Nullable
         @Override
         protected ISearchExecutor getSearchRunner() {
             return this;
         }
 
         @Override
-        public void fillCustomActions(IContributionManager contributionManager) {
+        public void fillCustomActions(@NotNull IContributionManager contributionManager) {
             super.fillCustomActions(contributionManager);
             if (part != null) {
                 DatabaseEditorUtils.contributeStandardEditorActions(part.getSite(), contributionManager);
@@ -292,7 +287,7 @@ public class TabbedFolderPageProperties extends TabbedFolderPage implements IRef
         public Font getFont(Object element)
         {
             if (element instanceof DBPPropertyDescriptor && curPropertySource != null && ((DBPPropertyDescriptor) element).isEditable(curPropertySource.getEditableValue())) {
-                return boldFont;
+                return BaseThemeSettings.instance.treeAndTableFontBold;
             }
             return null;
         }

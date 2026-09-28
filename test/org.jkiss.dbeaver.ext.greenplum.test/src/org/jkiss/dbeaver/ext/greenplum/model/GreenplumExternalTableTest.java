@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,14 +23,13 @@ import org.jkiss.dbeaver.ext.postgresql.model.PostgreSchema;
 import org.jkiss.dbeaver.ext.postgresql.model.PostgreTableColumn;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCResultSet;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.jkiss.junit.DBeaverUnitTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -38,8 +37,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
-@RunWith(MockitoJUnitRunner.class)
-public class GreenplumExternalTableTest {
+public class GreenplumExternalTableTest extends DBeaverUnitTest {
     @Mock
     DBRProgressMonitor monitor;
 
@@ -72,7 +70,7 @@ public class GreenplumExternalTableTest {
     private final String exampleRejectLimitType = "r";
     private final String exampleExecLocation = "ALL_SEGMENTS";
 
-    @Before
+    @BeforeEach
     public void setup() throws SQLException {
         Mockito.when(mockSchema.getDatabase()).thenReturn(mockDatabase);
         Mockito.when(mockSchema.getDataSource()).thenReturn(mockDataSource);
@@ -95,26 +93,26 @@ public class GreenplumExternalTableTest {
     @Test
     public void onCreation_whenNoInitialDbResultIsProvided_thenDefaultEncodingIsSetToUTF8() {
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema);
-        Assert.assertEquals("UTF8", table.getEncoding());
+        Assertions.assertEquals("UTF8", table.getEncoding());
     }
 
     @Test
     public void onCreation_whenNoInitialDbResultIsProvided_thenDefaultFormatIsText() {
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema);
-        Assert.assertEquals("TEXT", table.getFormatType());
+        Assertions.assertEquals("TEXT", table.getFormatType());
     }
 
     @Test
     public void onCreation_whenNoInitialDbResultIsProvided_thenDefaultFormatOptionsAreBasedOnTextFormatType() {
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema);
-        Assert.assertEquals("delimiter ',' null '' escape '\"' quote '\"' header", table.getFormatOptions());
+        Assertions.assertEquals("delimiter ',' null '' escape '\"' quote '\"' header", table.getFormatOptions());
     }
 
     @Test
     public void onCreation_readsASingleUriLocationFromDbResult() throws SQLException {
         Mockito.when(mockResults.getString("urilocation")).thenReturn("SOME_EXTERNAL_LOCATION");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertEquals("SOME_EXTERNAL_LOCATION", table.getUriLocations());
+        Assertions.assertEquals("SOME_EXTERNAL_LOCATION", table.getUriLocations());
     }
 
     @Test
@@ -122,7 +120,7 @@ public class GreenplumExternalTableTest {
         Mockito.when(mockResults.getString("urilocation"))
                 .thenReturn("SOME_EXTERNAL_LOCATION,ANOTHER_EXTERNAL_LOCATION");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertEquals("SOME_EXTERNAL_LOCATION,ANOTHER_EXTERNAL_LOCATION",
+        Assertions.assertEquals("SOME_EXTERNAL_LOCATION,ANOTHER_EXTERNAL_LOCATION",
                 table.getUriLocations());
     }
 
@@ -130,7 +128,7 @@ public class GreenplumExternalTableTest {
     public void onCreation_readsNoLocationsFromDbResult() throws SQLException {
         Mockito.when(mockResults.getString("urilocation")).thenReturn("");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertTrue(table.getUriLocations().isEmpty());
+        Assertions.assertTrue(table.getUriLocations().isEmpty());
     }
 
     @Test
@@ -138,14 +136,14 @@ public class GreenplumExternalTableTest {
         Mockito.when(mockResults.getString("execlocation")).thenReturn("ALL_SEGMENTS");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
         String expectedUriLocation = "ALL_SEGMENTS";
-        Assert.assertEquals(expectedUriLocation, table.getExecLocation());
+        Assertions.assertEquals(expectedUriLocation, table.getExecLocation());
     }
 
     @Test
     public void onCreation_readsFormatTypeFromDbResult() throws SQLException {
         Mockito.when(mockResults.getString("fmttype")).thenReturn("t");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertEquals("TEXT", table.getFormatType());
+        Assertions.assertEquals("TEXT", table.getFormatType());
     }
 
     @Test
@@ -154,7 +152,7 @@ public class GreenplumExternalTableTest {
                 .thenReturn("delimiter ',' null '' escape '\"' quote '\"' header");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
         String expectedUriLocation = "delimiter ',' null '' escape '\"' quote '\"' header";
-        Assert.assertEquals(expectedUriLocation, table.getFormatOptions());
+        Assertions.assertEquals(expectedUriLocation, table.getFormatOptions());
     }
 
     @Test
@@ -162,14 +160,14 @@ public class GreenplumExternalTableTest {
         Mockito.when(mockResults.getString("encoding")).thenReturn("UTF8");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
         String expectedUriLocation = "UTF8";
-        Assert.assertEquals(expectedUriLocation, table.getEncoding());
+        Assertions.assertEquals(expectedUriLocation, table.getEncoding());
     }
 
     @Test
     public void onCreation_readsRejectLimitTypeFromDBResult() throws SQLException {
         Mockito.when(mockResults.getString("rejectlimittype")).thenReturn("r");
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertEquals(GreenplumExternalTable.RejectLimitType.r, table.getRejectLimitType());
+        Assertions.assertEquals(GreenplumExternalTable.RejectLimitType.r, table.getRejectLimitType());
     }
 
     @Test
@@ -177,28 +175,28 @@ public class GreenplumExternalTableTest {
         Mockito.when(mockResults.getInt("rejectlimit")).thenReturn(50_000);
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
         int expectedUriLocation = 50_000;
-        Assert.assertEquals(expectedUriLocation, table.getRejectLimit());
+        Assertions.assertEquals(expectedUriLocation, table.getRejectLimit());
     }
 
     @Test
     public void onCreation_readsWritableFlagFromDBResult() throws SQLException {
         Mockito.when(mockResults.getBoolean("writable")).thenReturn(true);
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertTrue(table.isWritable());
+        Assertions.assertTrue(table.isWritable());
     }
 
     @Test
     public void onCreation_readsTemporaryTableFlagFromDBResult() throws SQLException {
         Mockito.when(mockResults.getBoolean("is_temp_table")).thenReturn(true);
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertTrue(table.isTemporaryTable());
+        Assertions.assertTrue(table.isTemporaryTable());
     }
 
     @Test
     public void onCreation_readsLoggingErrorsFlagFromDBResult() throws SQLException {
         Mockito.when(mockResults.getBoolean("is_logging_errors")).thenReturn(true);
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertTrue(table.isLoggingErrors());
+        Assertions.assertTrue(table.isLoggingErrors());
     }
 
     @Test
@@ -206,7 +204,7 @@ public class GreenplumExternalTableTest {
         // Greenplum 6 runs on Postgre 9.4.x
         Mockito.when(mockDataSource.isServerVersionAtLeast(9,4)).thenReturn(true);
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertFalse(table.isLoggingErrors());
+        Assertions.assertFalse(table.isLoggingErrors());
         Mockito.verify(mockResults, Mockito.times(0)).getBoolean("is_logging_errors");
     }
 
@@ -227,7 +225,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -248,7 +246,7 @@ public class GreenplumExternalTableTest {
                         ") ON ALL\n" +
                         "FORMAT 'CSV' ( DELIMITER ',' )";
 
-        Assert.assertEquals(expectedDDLWithNoEncodingSet, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDLWithNoEncodingSet, table.generateDDL(monitor));
     }
 
     @Test
@@ -269,7 +267,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDLWithMultiColumns, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDLWithMultiColumns, table.generateDDL(monitor));
     }
 
     @Test
@@ -293,7 +291,7 @@ public class GreenplumExternalTableTest {
                         "ENCODING 'UTF8'\n" +
                         "SEGMENT REJECT LIMIT 100000 ROWS";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -315,7 +313,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -339,7 +337,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -362,7 +360,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CUSTOM' ( FORMATTER='formatter_export_s' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -384,7 +382,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -406,7 +404,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -428,7 +426,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -451,7 +449,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -474,7 +472,7 @@ public class GreenplumExternalTableTest {
                         "ENCODING 'UTF8'\n" +
                         "LOG ERRORS";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -499,7 +497,7 @@ public class GreenplumExternalTableTest {
                         "ENCODING 'UTF8'\n" +
                         "LOG ERRORS SEGMENT REJECT LIMIT 100000 ROWS";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -521,7 +519,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV'\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -538,7 +536,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'CSV' ( DELIMITER ',' )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -564,7 +562,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'TEXT' ( delimiter ',' null '' escape '\"' quote '\"' header )\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -586,7 +584,7 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'TEXT'\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
@@ -609,20 +607,20 @@ public class GreenplumExternalTableTest {
                         "FORMAT 'TEXT'\n" +
                         "ENCODING 'UTF8'";
 
-        Assert.assertEquals(expectedDDL, table.generateDDL(monitor));
+        Assertions.assertEquals(expectedDDL, table.generateDDL(monitor));
     }
 
     @Test
     public void setFormatType_whenProvidedAValidStringRepresentationOfFormatType_setsFormatTypeEnumSuccessfully() {
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema);
         table.setFormatType("CUSTOM");
-        Assert.assertEquals("CUSTOM", table.getFormatType());
+        Assertions.assertEquals("CUSTOM", table.getFormatType());
     }
 
     @Test
     public void generateChangeOwnerQuery_whenProvidedAValidOwner_thenShouldGenerateQuerySuccessfully() {
         GreenplumExternalTable table = new GreenplumExternalTable(mockSchema, mockResults);
-        Assert.assertEquals("ALTER EXTERNAL TABLE \"sampleSchema\".\"sampleTable\" OWNER TO someOwner",
+        Assertions.assertEquals("ALTER EXTERNAL TABLE \"sampleSchema\".\"sampleTable\" OWNER TO someOwner",
                 table.generateChangeOwnerQuery("someOwner", new HashMap<>()));
     }
 

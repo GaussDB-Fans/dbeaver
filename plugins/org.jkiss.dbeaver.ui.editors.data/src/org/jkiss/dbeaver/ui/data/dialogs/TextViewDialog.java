@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,17 @@ package org.jkiss.dbeaver.ui.data.dialogs;
 
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.CTabFolder;
+import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.custom.StyledText;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.widgets.*;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Label;
+import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBIcon;
@@ -65,19 +70,20 @@ public class TextViewDialog extends ValueViewDialog {
     private Label lengthLabel;
     private IHexEditorService hexEditorService;
     private Control hexEditControl;
-    private TabFolder editorContainer;
+    private CTabFolder editorContainer;
     private boolean dirty;
 
-    public TextViewDialog(IValueController valueController) {
+    public TextViewDialog(@NotNull IValueController valueController) {
         super(valueController);
     }
 
+    @NotNull
     @Override
-    protected Composite createDialogArea(Composite parent)
+    protected Composite createDialogArea(@NotNull Composite parent)
     {
         Composite dialogGroup = super.createDialogArea(parent);
 
-        ReferenceValueEditor referenceValueEditor = new ReferenceValueEditor(getValueController(), this);
+        ReferenceValueEditor referenceValueEditor = new ReferenceValueEditor(null, getValueController(), this);
         boolean isForeignKey = referenceValueEditor.isReferenceValue();
 
         Label label = new Label(dialogGroup, SWT.NONE);
@@ -91,7 +97,7 @@ public class TextViewDialog extends ValueViewDialog {
         final DBSTypedObject valueType = getValueController().getValueType();
         long maxSize = valueType.getMaxLength();
         if (hexEditorService != null) {
-            editorContainer = new TabFolder(dialogGroup, SWT.FLAT | SWT.TOP);
+            editorContainer = new CTabFolder(dialogGroup, SWT.FLAT | SWT.TOP);
             editorContainer.setLayoutData(new GridData(GridData.FILL_BOTH));
 
             lengthLabel = new Label(dialogGroup, SWT.RIGHT);
@@ -139,10 +145,11 @@ public class TextViewDialog extends ValueViewDialog {
             StyledTextUtils.fillDefaultStyledTextContextMenu(textEdit);
 
             if (hexEditorService != null) {
-                TabItem item = new TabItem(editorContainer, SWT.NO_FOCUS);
+                CTabItem item = new CTabItem(editorContainer, SWT.NO_FOCUS);
                 item.setText("Text");
                 item.setImage(DBeaverIcons.getImage(DBIcon.TYPE_TEXT));
                 item.setControl(textEdit);
+                editorContainer.setSelection(item);
             }
         }
         Point minSize = null;
@@ -152,7 +159,7 @@ public class TextViewDialog extends ValueViewDialog {
             minSize = hexEditControl.computeSize(SWT.DEFAULT, SWT.DEFAULT);
             minSize.x += 50;
             minSize.y += 50;
-            TabItem item = new TabItem(editorContainer, SWT.NO_FOCUS);
+            CTabItem item = new CTabItem(editorContainer, SWT.NO_FOCUS);
             item.setText("Hex");
             item.setImage(DBeaverIcons.getImage(DBIcon.TYPE_BINARY));
             item.setControl(hexEditControl);
@@ -161,18 +168,11 @@ public class TextViewDialog extends ValueViewDialog {
                 selectedType = 0;
             }
             editorContainer.setSelection(selectedType);
-            editorContainer.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent event)
-                {
-                    getDialogSettings().put(VALUE_TYPE_SELECTOR, editorContainer.getSelectionIndex());
-                }
-            });
+            editorContainer.addSelectionListener(SelectionListener.widgetSelectedAdapter(event ->
+                getDialogSettings().put(VALUE_TYPE_SELECTOR, editorContainer.getSelectionIndex())));
             hexEditControl.addListener(SWT.Modify, event -> dirty = true);
             updateValueLength();
         }
-
-        primeEditorValue(getValueController().getValue());
 
         if (isForeignKey) {
             referenceValueEditor.createEditorSelector(dialogGroup);
@@ -183,6 +183,8 @@ public class TextViewDialog extends ValueViewDialog {
             getShell().setMinimumSize(minSize);
         }
 
+        UIUtils.asyncExec(() ->
+            primeEditorValue(getValueController().getValue()));
         return dialogGroup;
     }
 
@@ -195,9 +197,11 @@ public class TextViewDialog extends ValueViewDialog {
         }
     }
 
-    private String getBinaryString()
-    {
+    private String getBinaryString() {
         byte[] bytes = getBinaryContent();
+        if (bytes == null) {
+            return "";
+        }
         int length = bytes.length;
         String stringValue;
         try {
@@ -253,7 +257,11 @@ public class TextViewDialog extends ValueViewDialog {
             }
         }
 
-        try (DBCSession session = getValueController().getExecutionContext().openSession(new VoidProgressMonitor(), DBCExecutionPurpose.UTIL, "Make text value from editor")) {
+        try (DBCSession session = getValueController().getExecutionContext().openSession(
+            new VoidProgressMonitor(),
+            DBCExecutionPurpose.UTIL,
+            "Make text value from editor"
+        )) {
             return getValueController().getValueHandler().getValueFromObject(
                 session,
                 getValueController().getValueType(),
@@ -326,7 +334,7 @@ public class TextViewDialog extends ValueViewDialog {
     }
 
     @Override
-    protected void createButtonsForButtonBar(Composite parent) {
+    protected void createButtonsForButtonBar(@NotNull Composite parent) {
         super.createButtonsForButtonBar(parent);
         if (getValueController().getValueType().getDataKind() == DBPDataKind.STRING) {
             Button button = createButton(parent, IDialogConstants.PROCEED_ID, ResultSetMessages.dialog_text_view_open_editor, false);

@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2011-2012 Eugene Fradkin (eugene.fradkin@gmail.com)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +19,7 @@ package org.jkiss.dbeaver.ui.dialogs.connection;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
@@ -36,37 +33,32 @@ import org.jkiss.dbeaver.model.connection.LocalNativeClientLocation;
 import org.jkiss.dbeaver.registry.driver.DriverDescriptor;
 import org.jkiss.dbeaver.registry.driver.RemoteNativeClientLocation;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
-import org.jkiss.dbeaver.ui.DBeaverIcons;
-import org.jkiss.dbeaver.ui.ShellUtils;
-import org.jkiss.dbeaver.ui.UIIcon;
-import org.jkiss.dbeaver.ui.UIUtils;
+import org.jkiss.dbeaver.ui.*;
 import org.jkiss.dbeaver.ui.internal.UIConnectionMessages;
 import org.jkiss.dbeaver.utils.HelpUtils;
 import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.List;
 import java.util.*;
+import java.util.List;
 
 /**
  * ClientHomesPanel
  */
 public class ClientHomesPanel extends Composite {
     private static final Log log = Log.getLog(ClientHomesPanel.class);
-    public static final String WIKI_CONFIGURE_CLIENT = "https://dbeaver.com/docs/dbeaver/Local-Client-Configuration/";
+    public static final String WIKI_CONFIGURE_CLIENT = "Local-Client-Configuration";
 
     private static String lastHomeDirectory;
 
-    private Table homesTable;
-    private Text idText;
-    private Text pathText;
-    private Text nameText;
-    private Text productNameText;
-    private Text productVersionText;
-    private Button removeButton;
-    private Font fontBold;
-    private Font fontItalic;
+    private final Table homesTable;
+    private final Text idText;
+    private final Text pathText;
+    private final Text nameText;
+    private final Text productNameText;
+    private final Text productVersionText;
+    private final Button removeButton;
 
     private DBPDriver driver;
 
@@ -86,13 +78,6 @@ public class ClientHomesPanel extends Composite {
         int style) {
         super(parent, style);
 
-        fontBold = UIUtils.makeBoldFont(parent.getFont());
-        fontItalic = UIUtils.modifyFont(parent.getFont(), SWT.ITALIC);
-        addDisposeListener(e -> {
-            UIUtils.dispose(fontBold);
-            UIUtils.dispose(fontItalic);
-        });
-
         GridLayout layout = new GridLayout(2, false);
         setLayout(layout);
 
@@ -101,42 +86,36 @@ public class ClientHomesPanel extends Composite {
         ((GridData) (listGroup.getLayoutData())).minimumWidth = 200;
         homesTable = new Table(listGroup, SWT.SINGLE | SWT.BORDER | SWT.FULL_SELECTION | SWT.H_SCROLL | SWT.V_SCROLL);
         homesTable.setLayoutData(new GridData(GridData.FILL_BOTH));
-        homesTable.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        homesTable.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 TableItem[] selection = homesTable.getSelection();
                 if (ArrayUtils.isEmpty(selection)) {
                     selectHome(null);
                 } else {
                     selectHome((HomeInfo) selection[0].getData());
                 }
-            }
-        });
+            }));
         Composite buttonsGroup = UIUtils.createPlaceholder(listGroup, 2, 5);
         buttonsGroup.setLayoutData(new GridData(GridData.FILL_HORIZONTAL | GridData.HORIZONTAL_ALIGN_END));
         Button addButton = new Button(buttonsGroup, SWT.PUSH);
         addButton.setText(UIConnectionMessages.controls_client_homes_panel_button_add_home);
-        addButton.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-                addClientHome();
-            }
-        });
+        addButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> addClientHome()));
         removeButton = new Button(buttonsGroup, SWT.PUSH);
         removeButton.setText(UIConnectionMessages.controls_client_homes_panel_button_remove_home);
         removeButton.setEnabled(false);
-        removeButton.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        removeButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 TableItem[] selection = homesTable.getSelection();
                 if (!ArrayUtils.isEmpty(selection)) {
                     removeClientHome();
                 }
-            }
-        });
+            }));
 
-        Group infoGroup = UIUtils.createControlGroup(this, UIConnectionMessages.controls_client_homes_panel_group_information, 2, GridData.VERTICAL_ALIGN_BEGINNING | GridData.FILL_HORIZONTAL, 0);
-        ((GridData) (infoGroup.getLayoutData())).minimumWidth = 300;
+        Composite infoGroup = UIUtils.createTitledComposite(
+            this,
+            UIConnectionMessages.controls_client_homes_panel_group_information,
+            2,
+            GridData.VERTICAL_ALIGN_BEGINNING | GridData.FILL_HORIZONTAL,
+            0
+        );
         idText = UIUtils.createLabelText(infoGroup, UIConnectionMessages.controls_client_homes_panel_label_id, null, SWT.BORDER | SWT.READ_ONLY);
         pathText = UIUtils.createLabelText(infoGroup, UIConnectionMessages.controls_client_homes_panel_label_path, null, SWT.BORDER | SWT.READ_ONLY);
         nameText = UIUtils.createLabelText(infoGroup, UIConnectionMessages.controls_client_homes_panel_label_name, null, SWT.BORDER | SWT.READ_ONLY);
@@ -149,12 +128,8 @@ public class ClientHomesPanel extends Composite {
             UIUtils.createLink(
                 infoPanel,
                 UIConnectionMessages.controls_client_homes_panel_link_message,
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
-                        ShellUtils.launchProgram(HelpUtils.getHelpExternalReference(WIKI_CONFIGURE_CLIENT));
-                    }
-                });
+                SelectionListener.widgetSelectedAdapter(e ->
+                    ShellUtils.launchProgram(HelpUtils.getHelpExternalReference(WIKI_CONFIGURE_CLIENT))));
             GridData gridData = new GridData(GridData.FILL, SWT.END, true, true);
             gridData.horizontalSpan = 2;
             infoPanel.setLayoutData(gridData);
@@ -257,12 +232,10 @@ public class ClientHomesPanel extends Composite {
 
         for (DBPNativeClientLocation home : allHomes) {
             TableItem item = createHomeItem(clientManager, home, home instanceof RemoteNativeClientLocation || providedHomes.contains(home));
-            if (item != null) {
-                HomeInfo homeInfo = (HomeInfo) item.getData();
-                if (homeInfo.isDefault) {
-                    homesTable.setSelection(homesTable.indexOf(item));
-                    selectHome(homeInfo);
-                }
+            HomeInfo homeInfo = (HomeInfo) item.getData();
+            if (homeInfo.isDefault) {
+                homesTable.setSelection(homesTable.indexOf(item));
+                selectHome(homeInfo);
             }
         }
     }
@@ -283,10 +256,10 @@ public class ClientHomesPanel extends Composite {
         homeItem.setImage(DBeaverIcons.getImage(UIIcon.HOME));
         homeItem.setData(homeInfo);
         if (!homeInfo.isProvided) {
-            homeItem.setFont(fontItalic);
+            homeItem.setFont(BaseThemeSettings.instance.treeAndTableFontItalic);
         } else {
             if (homeInfo.isDefault) {
-                homeItem.setFont(fontBold);
+                homeItem.setFont(BaseThemeSettings.instance.treeAndTableFontBold);
             }
         }
         return homeItem;
@@ -302,7 +275,7 @@ public class ClientHomesPanel extends Composite {
     }
 
     private static class ChooserDialog extends org.eclipse.jface.dialogs.Dialog {
-        private DBPDriver driver;
+        private final DBPDriver driver;
         private ClientHomesPanel panel;
         private String selectedHome;
 
@@ -333,9 +306,14 @@ public class ClientHomesPanel extends Composite {
         protected void buttonPressed(int buttonId) {
             if (IDialogConstants.OK_ID == buttonId) {
                 selectedHome = panel.getSelectedHome();
-                if (driver instanceof DriverDescriptor) {
-                    ((DriverDescriptor) driver).setNativeClientLocations(panel.getLocalLocations());
-                    ((DriverDescriptor) driver).getProviderDescriptor().getRegistry().saveDrivers();
+                if (driver instanceof DriverDescriptor descriptor) {
+                    descriptor.setNativeClientLocations(panel.getLocalLocations());
+                    try {
+                        descriptor.getProviderDescriptor().getRegistry().saveDrivers();
+                    } catch (DBException e) {
+                        DBWorkbench.getPlatformUI().showError("Save error", "Error saving drivers", e);
+                        return;
+                    }
                 }
             }
             super.buttonPressed(buttonId);

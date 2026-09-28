@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2016 Karl Griesser (fullref@gmail.com)
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +24,6 @@ public class ExasolMessages extends NLS {
     public static String manager_consumer_drop;
     public static String manager_consumer_rename;
     public static String manager_consumer_create;
-    public static String dialog_schema_drop_title;
-    public static String dialog_schema_drop_message;
-    public static String dialog_connection_alter_message;
-    public static String dialog_connection_alter_title;
-
-    public static String dialog_general_continue;
 
     public static String read_table_details;
     public static String read_schema_details;

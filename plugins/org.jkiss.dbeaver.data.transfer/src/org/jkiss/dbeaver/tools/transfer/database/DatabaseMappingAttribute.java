@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +50,9 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
 
     public static final String TARGET_NAME_SKIP = "[skip]";
 
+    // collation names are bare identifiers, anything else would break the generated DDL
+    private static final Pattern COLLATION_NAME_PATTERN = Pattern.compile("\\w+");
+
     private final DatabaseMappingContainer parent;
     @Nullable
     private final DBSAttributeBase source;
@@ -56,34 +60,32 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
     private DBSEntityAttribute target;
     private String targetName;
     private String targetType;
+    private String targetTypeWithModifiers;
+    private String targetCollation;
     private DatabaseMappingType mappingType;
     private DataTransferAttributeTransformerDescriptor transformer;
     private final Map<String, Object> transformerProperties = new LinkedHashMap<>();
 
-    DatabaseMappingAttribute(DatabaseMappingContainer parent, @NotNull DBSAttributeBase source) {
+    DatabaseMappingAttribute(
+        DatabaseMappingContainer parent,
+        @NotNull DBSAttributeBase source
+    ) {
         this.parent = parent;
         this.source = source;
         this.mappingType = DatabaseMappingType.unspecified;
     }
 
     DatabaseMappingAttribute(
-        @NotNull DatabaseMappingContainer parent,
-        @Nullable DBSAttributeBase source,
-        @Nullable DBSEntityAttribute target,
-        @NotNull DatabaseMappingType mappingType)
-    {
-        this.parent = parent;
-        this.source = source;
-        this.target = target;
-        this.mappingType = mappingType;
-    }
-
-    DatabaseMappingAttribute(@NotNull DatabaseMappingAttribute attribute, @NotNull DatabaseMappingContainer parent) {
+        @NotNull DatabaseMappingAttribute attribute,
+        @NotNull DatabaseMappingContainer parent
+    ) {
         this.parent = parent;
         this.source = attribute.source;
         this.target = attribute.target;
         this.targetName = attribute.targetName;
         this.targetType = attribute.targetType;
+        this.targetTypeWithModifiers = attribute.targetTypeWithModifiers;
+        this.targetCollation = attribute.targetCollation;
         this.mappingType = attribute.mappingType;
     }
 
@@ -91,6 +93,7 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         return parent;
     }
 
+    @NotNull
     @Override
     public DBPImage getIcon() {
         return DBValueFormatting.getObjectImage(source);
@@ -121,6 +124,7 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         return typeName;
     }
 
+    @NotNull
     @Override
     public String getTargetName() {
         switch (mappingType) {
@@ -129,10 +133,10 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
                 if (target != null) {
                     return DBUtils.getObjectFullName(target, DBPEvaluationContext.UI);
                 } else {
-                    return targetName;
+                    return CommonUtils.notEmpty(targetName);
                 }
             case create:
-                return targetName;
+                return CommonUtils.notEmpty(targetName);
             case skip:
                 return TARGET_NAME_SKIP;
             default:
@@ -140,6 +144,7 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         }
     }
 
+    @NotNull
     @Override
     public DatabaseMappingType getMappingType() {
         return mappingType;
@@ -165,18 +170,17 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         }
 
         mappingType = DatabaseMappingType.unspecified;
-        if (parent.getTarget() instanceof DBSEntity) {
+        if (parent.getTarget() instanceof DBSEntity targetEntity) {
             if (forceRefresh || CommonUtils.isEmpty(targetName)) {
                 targetName = getSourceLabelOrName(source, false, updateAttributesNames);
             }
-            DBSEntity targetEntity = (DBSEntity) parent.getTarget();
             List<? extends DBSEntityAttribute> targetAttributes = targetEntity.getAttributes(monitor);
             if (CommonUtils.isEmpty(targetAttributes) && targetEntity instanceof DBPRefreshableObject) {
                 // Reload table attributes cache. It can be empty after table deleting
                 ((DBPRefreshableObject) targetEntity).refreshObject(monitor);
                 targetAttributes = targetEntity.getAttributes(monitor);
             }
-            if (targetAttributes != null) {
+            if (targetAttributes != null && targetEntity.getDataSource() != null) {
                 target = CommonUtils.findBestCaseAwareMatch(
                     targetAttributes,
                     DBUtils.getUnQuotedIdentifier(targetEntity.getDataSource(), targetName),
@@ -211,12 +215,12 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
                         }
                     }
                 }
-
-                if (target != null) {
-                    source.setTypeName(target.getTypeName());
-                    source.setMaxLength(target.getMaxLength());
-                    source.setDataKind(target.getDataKind());
-                }
+               // Looks like now it useless code and autodetection types happens early. Origin ticket dbeaver#10034
+               // if (target != null) {
+               //     source.setTypeName(target.getTypeName());
+               //     source.setMaxLength(target.getMaxLength());
+               //     source.setDataKind(target.getDataKind());
+               // }
             }
             if (this.target != null) {
                 if (parent.getMappingType() == DatabaseMappingType.recreate) {
@@ -298,8 +302,7 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         if (source instanceof DBSObject) {
             DBPDataSource sourceDataSource = ((DBSObject) source).getDataSource();
             String sourceAttributeName = getSourceAttributeName(source);
-            if (sourceDataSource != null && sourceDataSource.getSQLDialect() != null
-                && CommonUtils.isNotEmpty(sourceAttributeName)) {
+            if (sourceDataSource != null && CommonUtils.isNotEmpty(sourceAttributeName)) {
                 isSkipNameTransformation = sourceDataSource.getSQLDialect().mustBeQuoted(sourceAttributeName, true);
             }
         }
@@ -320,23 +323,31 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         this.targetName = targetName;
     }
 
-    public String getTargetType(DBPDataSource targetDataSource, boolean addModifiers) {
-        if (!CommonUtils.isEmpty(targetType)) {
+    public String getTargetType(@Nullable DBPDataSource targetDataSource, boolean addModifiers) {
+        if (!addModifiers && !CommonUtils.isEmpty(targetType)) {
             return targetType;
+        } else if (addModifiers && !CommonUtils.isEmpty(targetTypeWithModifiers)) {
+            return targetTypeWithModifiers;
         }
 
-        changeDataTypeLength(targetDataSource);
-        return DBStructUtils.mapTargetDataType(targetDataSource, source, addModifiers);
+        if (targetDataSource != null) {
+            changeDataTypeLength(targetDataSource);
+        }
+        if (source == null) {
+            // Internal error?
+            return DBConstants.DEFAULT_DATATYPE_NAMES[0];
+        } else {
+            return DBStructUtils.mapTargetDataType(targetDataSource, source, addModifiers);
+        }
     }
 
     private void changeDataTypeLength(@NotNull DBPDataSource targetDataSource) {
-        if (source instanceof DBSTypedObjectExt2) {
+        if (source instanceof DBSTypedObjectExt2 sourceExt) {
             DBPPreferenceStore preferenceStore = targetDataSource.getContainer().getPreferenceStore();
             DBPPreferenceStore store = DTActivator.getDefault().getPreferences();
             if (preferenceStore.contains(DTConstants.PREF_MAX_TYPE_LENGTH) || store.contains(DTConstants.PREF_MAX_TYPE_LENGTH)) {
                 int maxDataTypeLength = preferenceStore.contains(DTConstants.PREF_MAX_TYPE_LENGTH) ?
                     preferenceStore.getInt(DTConstants.PREF_MAX_TYPE_LENGTH) : store.getInt(DTConstants.PREF_MAX_TYPE_LENGTH);
-                DBSTypedObjectExt2 sourceExt = (DBSTypedObjectExt2) source;
                 if (source.getDataKind() == DBPDataKind.NUMERIC &&
                     source.getPrecision() != null && source.getPrecision() > maxDataTypeLength
                 ) {
@@ -350,6 +361,63 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
 
     public void setTargetType(String targetType) {
         this.targetType = targetType;
+        this.targetTypeWithModifiers = targetType;
+    }
+
+    public void setTargetType(String targetType, String targetTypeWithModifiers) {
+        this.targetType = targetType;
+        this.targetTypeWithModifiers = targetTypeWithModifiers;
+    }
+
+    @Nullable
+    public DBSCollationProvider getTargetCollationProvider() {
+        DBSObjectContainer container = parent == null ? null : parent.getSettings().getContainer();
+        if (container instanceof DBSCollationProvider provider) {
+            return provider;
+        }
+        return DBUtils.getParentOfType(DBSCollationProvider.class, container);
+    }
+
+    /** False for numeric, binary and other types which can't carry a collation */
+    public boolean isCollationApplicable() {
+        DBSCollationProvider provider = getTargetCollationProvider();
+        if (provider == null) {
+            return false;
+        }
+        String typeName = getTargetType(parent.getSettings().getTargetDataSource(this), false);
+        return !CommonUtils.isEmpty(typeName) && provider.isCollatableType(typeName);
+    }
+
+    /**
+     * Collation to set on the created attribute, null when it must inherit the target default.
+     * An explicit choice wins over the source collation, but both are validated the same way:
+     * the target type must be collatable and the server must know the collation.
+     */
+    @Nullable
+    public String getTargetCollation(@NotNull DBRProgressMonitor monitor) {
+        if (!isCollationApplicable()) {
+            return null;
+        }
+        // empty explicit value means the user asked for the target default
+        String collation = targetCollation != null ? targetCollation : getSourceCollation();
+        if (CommonUtils.isEmpty(collation) || !COLLATION_NAME_PATTERN.matcher(collation).matches()) {
+            return null;
+        }
+        DBSCollationProvider provider = getTargetCollationProvider();
+        return provider != null && provider.isCollationSupported(monitor, collation) ? collation : null;
+    }
+
+    public void setTargetCollation(@Nullable String targetCollation) {
+        this.targetCollation = targetCollation;
+    }
+
+    @Nullable
+    private String getSourceCollation() {
+        DBSAttributeBase sourceAttr = source;
+        if (sourceAttr instanceof DBDAttributeBinding binding) {
+            sourceAttr = binding.getEntityAttribute();
+        }
+        return sourceAttr instanceof DBSAttributeCollation collationAttr ? collationAttr.getCollationName() : null;
     }
 
     public DataTransferAttributeTransformerDescriptor getTransformer() {
@@ -380,6 +448,12 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
         if (targetType != null) {
             settings.put("targetType", targetType);
         }
+        if (targetTypeWithModifiers != null) {
+            settings.put("targetTypeWithModifiers", targetTypeWithModifiers);
+        }
+        if (targetCollation != null) {
+            settings.put("targetCollation", targetCollation);
+        }
         if (mappingType != null) {
             settings.put("mappingType", mappingType.name());
 
@@ -394,14 +468,17 @@ public class DatabaseMappingAttribute implements DatabaseMappingObject {
     public void loadSettings(Map<String, Object> settings) {
         targetName = CommonUtils.toString(settings.get("targetName"));
         targetType = CommonUtils.toString(settings.get("targetType"));
+        targetTypeWithModifiers = CommonUtils.toString(settings.get("targetTypeWithModifiers"));
+        targetCollation = settings.containsKey("targetCollation")
+            ? CommonUtils.toString(settings.get("targetCollation"))
+            : null;
         if (settings.get("mappingType") != null) {
             try {
                 DatabaseMappingType newMappingType = DatabaseMappingType.valueOf((String) settings.get("mappingType"));
 
                 if (!CommonUtils.isEmpty(targetName)) {
                     DBSDataManipulator targetEntity = parent.getTarget();
-                    if (targetEntity instanceof DBSEntity) {
-                        DBSEntity dbsEntity = (DBSEntity) targetEntity;
+                    if (targetEntity instanceof DBSEntity dbsEntity) {
                         if (dbsEntity.getDataSource() != null) {
                             this.target = CommonUtils.findBestCaseAwareMatch(
                                 CommonUtils.safeCollection(dbsEntity.getAttributes(new VoidProgressMonitor())),

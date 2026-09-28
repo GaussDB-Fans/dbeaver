@@ -22,32 +22,36 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.Label;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.ui.UIUtils;
 
 public class EditTextDialog extends BaseDialog {
 
     private String text;
+    private String infoLabelText = "";
     private Text textControl;
     protected int textWidth = 300;
     protected int textHeight = 200;
     private boolean readonly = false;
     private boolean monospaceFont;
 
-    public EditTextDialog(Shell parentShell, String title, String text)
-    {
+    public EditTextDialog(Shell parentShell, String title, String text) {
         this(parentShell, title, text, false);
     }
 
-    public EditTextDialog(Shell parentShell, String title, String text, boolean readOnly)
-    {
+    public EditTextDialog(Shell parentShell, String title, String text, boolean readOnly) {
         super(parentShell, title, null);
         this.text = text;
         this.readonly = readOnly;
     }
 
-    public void setReadonly(boolean readonly)
-    {
+    public void setReadonly(boolean readonly) {
         this.readonly = readonly;
+    }
+
+    public void setLabelText(String text) {
+        this.infoLabelText = text;
     }
 
     public void setMonospaceFont(boolean monospaceFont) {
@@ -65,10 +69,18 @@ public class EditTextDialog extends BaseDialog {
     }
 
     @Override
-    protected Composite createDialogArea(Composite parent)
-    {
+    protected Composite createDialogArea(Composite parent) {
         Composite composite = super.createDialogArea(parent);
         createControlsBeforeText(composite);
+
+        if (infoLabelText.length() > 0) {
+            Label textLabel = new Label(composite, SWT.NONE);
+            textLabel.setText(infoLabelText);
+            GridData gd = new GridData();
+            gd.horizontalSpan = 1;
+            textLabel.setLayoutData(gd);
+        }
+
         textControl = new Text(composite, SWT.BORDER | SWT.WRAP | SWT.V_SCROLL);
         if (text != null) {
             textControl.setText(text);
@@ -96,24 +108,28 @@ public class EditTextDialog extends BaseDialog {
     }
 
     @Override
-    protected void createButtonsForButtonBar(Composite parent)
-    {
-		createButton(parent, IDialogConstants.OK_ID, IDialogConstants.OK_LABEL, true);
-		if (!readonly) {
-			createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, false);
-		}
+    protected void createButtonsForButtonBar(Composite parent) {
+        createButton(parent, IDialogConstants.OK_ID, IDialogConstants.OK_LABEL, true);
+        if (!readonly) {
+            createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, false);
+        }
     }
 
     @Override
-    protected void okPressed()
-    {
+    protected void okPressed() {
         text = textControl.getText();
         super.okPressed();
     }
 
-    public static String editText(Shell parentShell, String title, String text)
-    {
+    @Nullable
+    public static String editText(Shell parentShell, @Nullable String title, @Nullable String text) {
+        return editText(parentShell, title, text, "");
+    }
+
+    @Nullable
+    public static String editText(Shell parentShell, @Nullable String title, @Nullable String text, @Nullable String infoLabelText) {
         EditTextDialog dialog = new EditTextDialog(parentShell, title, text);
+        dialog.setLabelText(infoLabelText);
         if (dialog.open() == IDialogConstants.OK_ID) {
             return dialog.text;
         } else {
@@ -121,8 +137,7 @@ public class EditTextDialog extends BaseDialog {
         }
     }
 
-    public static void showText(Shell parentShell, String title, String text)
-    {
+    public static void showText(Shell parentShell, String title, String text) {
         EditTextDialog dialog = new EditTextDialog(parentShell, title, text);
         dialog.setReadonly(true);
         dialog.open();

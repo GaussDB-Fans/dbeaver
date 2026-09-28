@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,27 +18,40 @@ package org.jkiss.dbeaver.launcher;
 
 import org.eclipse.equinox.launcher.JNIBridge;
 
+import java.awt.*;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.CodeSource;
+import java.security.KeyStore;
 import java.security.ProtectionDomain;
+import java.security.Security;
 import java.util.*;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import javax.swing.*;
 
 
 /**
  * The launcher for Eclipse.
- *
  * Copied from org.eclipse.equinox.launcher.Main
- *
  * <b>Note:</b> This class should not be referenced programmatically by
  * other Java code. This class exists only for the purpose of launching Eclipse
  * from the command line. To launch Eclipse programmatically, use
@@ -47,6 +60,7 @@ import java.util.zip.ZipFile;
  */
 public class DBeaverLauncher {
 
+    public static final String PROP_ECLIPSE_NET_PROXY_ENABLE = "org.eclipse.net.core.enableProxyService";
     /**
      * Indicates whether this instance is running in debug mode.
      */
@@ -116,22 +130,11 @@ public class DBeaverLauncher {
     private String splashLocation = null;
     private String endSplash = null;
     private boolean initialize = false;
+    private boolean newInstance = false;
     protected boolean splashDown = false;
+    protected boolean cliMode = false;
 
-    public final class SplashHandler extends Thread {
-        @Override
-        public void run() {
-            takeDownSplash();
-        }
-
-        public void updateSplash() {
-            if (bridge != null && !splashDown) {
-                bridge.updateSplash();
-            }
-        }
-    }
-
-    private final Thread splashHandler = new SplashHandler();
+    private Thread splashHandler = null;
 
     //splash screen system properties
     public static final String SPLASH_HANDLE = "org.eclipse.equinox.launcher.splash.handle"; //$NON-NLS-1$
@@ -151,6 +154,8 @@ public class DBeaverLauncher {
     private static final String EXITDATA = "-exitdata"; //$NON-NLS-1$
     private static final String NAME = "-name"; //$NON-NLS-1$
     private static final String LAUNCHER = "-launcher"; //$NON-NLS-1$
+    private static final String PRODUCT = "-product"; //$NON-NLS-1$
+    private static final String APPLICATION = "-application";
 
     private static final String PROTECT = "-protect"; //$NON-NLS-1$
     //currently the only level of protection we care about.
@@ -161,6 +166,7 @@ public class DBeaverLauncher {
     private static final String APPEND_VMARGS = "--launcher.appendVmargs"; //$NON-NLS-1$
     private static final String OVERRIDE_VMARGS = "--launcher.overrideVmargs"; //$NON-NLS-1$
     private static final String NL = "-nl"; //$NON-NLS-1$
+    private static final String NEW_INSTANCE = "-newInstance"; //$NON-NLS-1$
     private static final String ENDSPLASH = "-endsplash"; //$NON-NLS-1$
     private static final String[] SPLASH_IMAGES = {"splash.png", //$NON-NLS-1$
             "splash.jpg", //$NON-NLS-1$
@@ -174,6 +180,7 @@ public class DBeaverLauncher {
     private static final String WS = "-ws"; //$NON-NLS-1$
     private static final String ARCH = "-arch"; //$NON-NLS-1$
     private static final String STARTUP = "-startup"; //$NON-NLS-1$
+    private static final String ARG_DATA = "-data"; //$NON-NLS-1$
 
     private static final String OSGI = "org.eclipse.osgi"; //$NON-NLS-1$
     private static final String STARTER = "org.eclipse.core.runtime.adaptor.EclipseStarter"; //$NON-NLS-1$
@@ -223,7 +230,7 @@ public class DBeaverLauncher {
 
     private static final String PROP_EXITCODE = "eclipse.exitcode"; //$NON-NLS-1$
     private static final String PROP_EXITDATA = "eclipse.exitdata"; //$NON-NLS-1$
-    private static final String PROP_LAUNCHER = "eclipse.launcher"; //$NON-NLS-1$
+    public static final String PROP_LAUNCHER = "eclipse.launcher"; //$NON-NLS-1$
     private static final String PROP_LAUNCHER_NAME = "eclipse.launcher.name"; //$NON-NLS-1$
     private static final String PROP_LOG_INCLUDE_COMMAND_LINE = "eclipse.log.include.commandline"; //$NON-NLS-1$
 
@@ -281,14 +288,22 @@ public class DBeaverLauncher {
 
     public static final String DBEAVER_DATA_FOLDER = "DBeaverData";
     private static final String DBEAVER_INSTALL_FOLDER = "install-data";
-    private static final String ENV_DATA_HOME_WIN = "APPDATA"; //$NON-NLS-1$
-    private static final String LOCATION_DATA_HOME_UNIX = "~/.local/share"; //$NON-NLS-1$
-    private static final String LOCATION_DATA_HOME_MAC = "~/Library"; //$NON-NLS-1$
-    private static final String DB_DATA_HOME = "@data.home"; //$NON-NLS-1$
+    private static final String DBEAVER_SECURE_DIR = "secure"; //$NON-NLS-1$
+    private static final String DBEAVER_SECURE_FILE = "secure_storage"; //$NON-NLS-1$
+    public static final String ARG_ECLIPSE_KEYRING = "-eclipse.keyring"; //$NON-NLS-1$
+
+    private static final String DEFAULT_SECURE_STORAGE_FILENAME = ".eclipse/org.eclipse.equinox.security/secure_storage"; //$NON-NLS-1$
 
     private static final String DBEAVER_CONFIG_FOLDER = "settings";
     private static final String DBEAVER_CONFIG_FILE = "global-settings.ini";
     private static final String DBEAVER_PROP_LANGUAGE = "nl";
+
+    // List of incompatible Windows versions for those which we want to show a warning dialog
+    private static final Set<String> INCOMPATIBLE_WINDOWS_VERSIONS = Set.of(
+        "Windows 7",
+        "Windows 8",
+        "Windows Server 2012"
+    );
 
     /**
      * A structured form for a version identifier.
@@ -299,13 +314,6 @@ public class DBeaverLauncher {
     static class Identifier {
         private static final String DELIM = ". _-"; //$NON-NLS-1$
         private int major, minor, service;
-
-        Identifier(int major, int minor, int service) {
-            super();
-            this.major = major;
-            this.minor = minor;
-            this.service = service;
-        }
 
         /**
          * @throws NumberFormatException if cannot parse the major and minor version components
@@ -353,6 +361,89 @@ public class DBeaverLauncher {
                 return true;
             // minor numbers are equivalent so check service
             return service >= minimum.service;
+        }
+    }
+
+    /**
+     * Searches for the product ID in the provided array of command-line arguments.
+     * The ID follows the `-product` flag.
+     *
+     * @param args an array of command-line arguments to search through
+     * @return the product ID, or empty string if not found
+     */
+    private static String findProductIdInArgs(String[] args) {
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (PRODUCT.equals(arg) && i + 1 < args.length) {
+                return args[i + 1];
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Patch `java.security` properties to allow certain legacy crypto to work with non-server DBeaver products.
+     * <p>
+     * As explained in the linked issues and JRE and JDK Cryptographic Roadmap, some of the crypto algorithms are disabled in Java
+     * by default due to their inadequate (by modern standards) security qualities. However, these algorithms are still used by some
+     * legacy databases for encryption in transit. We believe that it's ok to enable them as long as we do it only for non-server products
+     * (i.e., DBeaver desktop, dbvr), since these applications do not have incoming traffic.
+     * <p>
+     * See:
+     * <a href="https://github.com/dbeaver/dbeaver/issues/12668">#12668</a>
+     * <a href="https://github.com/dbeaver/dbeaver/issues/40987">#40987</a>
+     * <a href="https://www.java.com/en/jre-jdk-cryptoroadmap.html">JRE and JDK Cryptographic Roadmap</a>
+     *
+     * @param args command line arguments
+     */
+    private static void patchJavaSecurity(String[] args) {
+        // We need a way to disable this using a Java property just in case
+        if (!Boolean.parseBoolean(System.getProperty("dbeaver.security.enableLegacyAlgorithms", "false"))) {
+            return;
+        }
+        // Let's detect a desktop DBeaver or dbvr using their product ID
+        String productId = findProductIdInArgs(args);
+        if (!productId.startsWith(Constants.PRODUCT_DBEAVER_COMMUNITY_PREFIX) &&
+            !productId.startsWith(Constants.PRODUCT_PROPRIETARY_DBEAVER_DESKTOP_PREFIX) &&
+            !productId.startsWith(Constants.PRODUCT_DBVR_PREFIX)
+        ) {
+            return;
+        }
+        // Let's put these obsolete algorithms into the ` legacyAlgorithms ` category so that they are still in use,
+        // but only if all other TLS protos and ciphers fail.
+        // See `conf/security/java.security` for an explanation of the used properties.
+        try {
+            String disabledAlgosKey = "jdk.tls.disabledAlgorithms";
+            Collection<String> algorithms = getSecurityPropertyValues(disabledAlgosKey);
+            String legacyAlgosKey = "jdk.tls.legacyAlgorithms";
+            getSecurityPropertyValues(legacyAlgosKey, algorithms);
+            Security.setProperty(legacyAlgosKey, String.join(", ", algorithms));
+            Security.setProperty(disabledAlgosKey, "");
+            // We also need to remove `ChaCha20-Poly1305 KeyUpdate 2^37` from `jdk.tls.keyLimits`. The reason for this is lost to history.
+            String keyLimitsKey = "jdk.tls.keyLimits";
+            Collection<String> keyLimits = getSecurityPropertyValues(keyLimitsKey);
+            keyLimits.remove("ChaCha20-Poly1305 KeyUpdate 2^37");
+            Security.setProperty(keyLimitsKey, String.join(", ", keyLimits));
+        } catch (RuntimeException ignore) {
+            // Just in case
+        }
+    }
+
+    private static Collection<String> getSecurityPropertyValues(String propertyKey) {
+        Collection<String> values = new HashSet<>();
+        getSecurityPropertyValues(propertyKey, values);
+        return values;
+    }
+
+    private static void getSecurityPropertyValues(String propertyKey, Collection<? super String> values) {
+        String propertyValue = Security.getProperty(propertyKey);
+        if (propertyValue == null) {
+            return;
+        }
+        // Split by `,` and then strip leading space instead of splitting by `, ` directly for performance reasons
+        String[] valuesArray = propertyValue.split(",");
+        for (String value : valuesArray) {
+            values.add(value.stripLeading());
         }
     }
 
@@ -436,10 +527,7 @@ public class DBeaverLauncher {
 
     private String getFragmentString(String fragmentOS, String fragmentWS, String fragmentArch) {
         StringJoiner buffer = new StringJoiner("."); //$NON-NLS-1$
-        buffer.add(PLUGIN_ID).add(fragmentWS).add(fragmentOS);
-        if (!(fragmentOS.equals(Constants.OS_MACOSX) && !Constants.ARCH_X86_64.equals(fragmentArch))) {
-            buffer.add(fragmentArch);
-        }
+        buffer.add(PLUGIN_ID).add(fragmentWS).add(fragmentOS).add(fragmentArch);
         return buffer.toString();
     }
 
@@ -494,7 +582,7 @@ public class DBeaverLauncher {
             if (urls != null && urls.length > 0) {
                 //the last one is most interesting
                 for (int i = urls.length - 1; i >= 0 && libPath == null; i--) {
-                    File entryFile = new File(urls[i].getFile());
+                    File entryFile = LauncherUtils.toFile(urls[i]);
                     String dir = entryFile.getParent();
                     if (inDevelopmentMode) {
                         String devDir = dir + "/" + PLUGIN_ID + "/fragments"; //$NON-NLS-1$ //$NON-NLS-2$
@@ -509,7 +597,7 @@ public class DBeaverLauncher {
         }
         if (libPath == null) {
             URL install = getInstallLocation();
-            String location = install.getFile();
+            String location = LauncherUtils.toFile(install).getPath();
             location += "/plugins/"; //$NON-NLS-1$
             fragment = searchFor(fragmentName, location);
             if (fragment != null)
@@ -565,16 +653,43 @@ public class DBeaverLauncher {
      * @throws Exception thrown if a problem occurs during the launch
      */
     protected void basicRun(String[] args) throws Exception {
+        checkCompatibleWindowsVersion();
+
         System.setProperty("eclipse.startTime", Long.toString(System.currentTimeMillis())); //$NON-NLS-1$
+        disableDefaultProxyServiceActivation();
         commands = args;
         String[] passThruArgs = processCommandLine(args);
-
+        patchJavaSecurity(passThruArgs);
+        if (debug) {
+            System.out.println("Processed command line arguments: " + Arrays.toString(passThruArgs));
+        }
         if (!debug)
             // debug can be specified as system property as well
             debug = System.getProperty(PROP_DEBUG) != null;
         setupVMProperties();
         processConfiguration();
         processGlobalConfiguration();
+        Path dbeaverDataDir = getDataDirectory();
+        try {
+            CommandLineExecuteResult commandLineExecuteResult = processCommandLineAsClient(passThruArgs, dbeaverDataDir);
+            if (commandLineExecuteResult.shutdown()) {
+                System.setProperty(PROP_EXITCODE, Integer.toString(commandLineExecuteResult.exitCode()));
+                return;
+            }
+        } catch (Exception e) {
+            if (log == null) {
+                openLogFile();
+            }
+            log.write(e.getMessage());
+            if (debug) {
+                System.out.println("Error processing remote command line: " + e.getMessage());
+            }
+        }
+        Path secretStoragePath = useCustomSecretStorage(dbeaverDataDir);
+        if (secretStoragePath != null) {
+            String[] keyringParams =  { ARG_ECLIPSE_KEYRING, secretStoragePath.toString() };
+            passThruArgs = Stream.concat(Arrays.stream(passThruArgs), Arrays.stream(keyringParams)).toArray(String[]::new);
+        }
 
         if (protectBase && (System.getProperty(PROP_SHARED_CONFIG_AREA) == null)) {
             System.err.println("This application is configured to run in a cascaded mode only."); //$NON-NLS-1$
@@ -602,12 +717,367 @@ public class DBeaverLauncher {
         //if (!checkConfigurationLocation(configurationLocation))
         //    return;
 
-        // splash handling is done here, because the default case needs to know
-        // the location of the boot plugin we are going to use
-        handleSplash(bootPath);
+        boolean hasAppParams = hasAppParameters(passThruArgs);
+        if (debug) {
+            System.out.println("Has application parameters: " + hasAppParams);
+        }
+        if (!hasAppParams) {
+            // splash handling is done here, because the default case needs to know
+            // the location of the boot plugin we are going to use
+            handleSplash(bootPath);
+        } else {
+            boolean addNoSplash = true;
+            for (String arg : passThruArgs) {
+                if (arg.equals(APPLICATION)) {
+                    addNoSplash = false;
+                    break;
+                }
+            }
+            if (addNoSplash) {
+                passThruArgs = Stream.concat(Arrays.stream(passThruArgs), Arrays.stream(new String[] {NOSPLASH}))
+                    .toArray(String[]::new);
+            }
+        }
 
         beforeFwkInvocation();
+        if (debug) {
+            System.out.println("Invoking parameters: " + Arrays.toString(passThruArgs));
+        }
         invokeFramework(passThruArgs, bootPath);
+    }
+
+    /**
+     * Disable Eclipse proxy service activation
+     * We do it in {@link org.jkiss.dbeaver.ui.app.standalone.internal.CoreApplicationActivator#activateProxyService}
+     */
+    private static void disableDefaultProxyServiceActivation() {
+        if (System.getProperty(PROP_ECLIPSE_NET_PROXY_ENABLE) == null) {
+            System.setProperty(PROP_ECLIPSE_NET_PROXY_ENABLE, Boolean.FALSE.toString());
+        }
+    }
+
+    // Verifies that args has any non-standard parameters
+    private boolean hasAppParameters(String[] args) {
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (arg.equals(PRODUCT) || arg.equals(DEV) ||
+                arg.equals(STARTUP) ||
+                arg.equals(OS) || arg.equals(WS) || arg.equals(ARCH) ||
+                arg.equals(ARG_ECLIPSE_KEYRING) || arg.equals(LAUNCHER)) {
+                i++;
+                continue;
+            }
+            if (arg.equals("-consoleLog")) {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private void checkCompatibleWindowsVersion() {
+        if (GraphicsEnvironment.isHeadless() || isCompatibleWindowsVersion()) {
+            return;
+        }
+
+        try {
+            SwingUtilities.invokeAndWait(() -> JOptionPane.showMessageDialog(
+                null,
+                """
+                    You are using an incompatible operating system version: minimal supported
+                    version is Windows 10 (1607) or Windows Server 2016.
+                    
+                    You might experience issues and unexpected behavior when running DBeaver.
+                    
+                    Consider using an older version of DBeaver that supports your operating
+                    system, or upgrade your operating system to a newer version.
+                    """,
+                "Incompatible OS",
+                JOptionPane.ERROR_MESSAGE
+            ));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean isCompatibleWindowsVersion() {
+        String name = System.getProperty("os.name").toLowerCase(Locale.ROOT);
+        for (String other : INCOMPATIBLE_WINDOWS_VERSIONS) {
+            if (name.startsWith(other.toLowerCase(Locale.ROOT))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private CommandLineExecuteResult processCommandLineAsClient(String[] args, Path dbeaverDataDir) throws Exception {
+        if (Boolean.parseBoolean(System.getProperty(Constants.DISABLE_REMOTE_CLI))) {
+            if (debug) {
+                System.out.println("Remote CLI processing is disabled by system property.");
+            }
+            return new CommandLineExecuteResult(cliMode);
+        }
+        if (debug) {
+            System.out.println("Executing remote command line: " + Arrays.toString(args));
+        }
+        Path workspacePath = detectDefaultWorkspaceLocation(args, dbeaverDataDir);
+        if (debug) {
+            System.out.println("Detected workspace location: " + workspacePath);
+        }
+        if (args == null || args.length == 0 || newInstance) {
+            if (debug) {
+                System.out.println("Empty arguments or new instance requested, skipping remote CLI processing.");
+            }
+            return new CommandLineExecuteResult(cliMode);
+        }
+
+        if (Files.notExists(workspacePath)) {
+            if (debug) {
+                System.out.println("Workspace not exists: " + workspacePath);
+            }
+            return new CommandLineExecuteResult(cliMode);
+        }
+        InstanceServerProperties properties = readDBeaverServerInfo(workspacePath);
+
+        if (properties == null) {
+            if (debug) {
+                System.out.println("DBeaver server properties not found in workspace: " + workspacePath);
+            }
+            return new CommandLineExecuteResult(cliMode);
+        }
+        if (debug) {
+            System.out.println("Detected DBeaver server port: " + properties.port());
+        }
+
+
+        ExecutorService httpExecutor = Executors.newSingleThreadExecutor();
+        try (
+            HttpClient client = HttpClient.newBuilder()
+                .executor(httpExecutor)
+                .cookieHandler(new CookieManager())
+                .sslContext(initCustomSslContext())
+                .build()
+        ) {
+            boolean shutdownApplication;
+            short exitCode = -1;
+
+            HttpResponse.BodyHandler<String> stringBodyHandler =
+                response -> HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
+            String json = Arrays.stream(args)
+                .filter(Objects::nonNull)
+                .map(arg -> "\"" + LauncherUtils.escape(arg) + "\"")
+                .collect(Collectors.joining(",", "{\"args\":[", "]}"));
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + properties.port() + "/handleCommandLine"))
+                .header("Content-Type", "application/json")
+                .header(InstanceServerProperties.HEADER_AUTHORIZATION, InstanceServerProperties.BEARER_PREFIX + properties.password())
+                .POST(HttpRequest.BodyPublishers.ofString(json));
+            HttpRequest request = builder.build();
+            HttpResponse<String> response = client.send(request, stringBodyHandler);
+            String responseData = response.body();
+            if (!responseData.startsWith("{") || !responseData.endsWith("}")) {
+                System.out.println("Response is not expected json: " + responseData);
+                return new CommandLineExecuteResult(cliMode);
+            }
+
+            String action = null;
+            String output = null;
+            Matcher actionMatcher = CommandLineConstants.ACTION_PATTERN.matcher(responseData);
+            Matcher outputMatcher = CommandLineConstants.OUTPUT_PATTERN.matcher(responseData);
+            Matcher exitCodeMatcher = CommandLineConstants.EXIT_CODE_PATTERN.matcher(responseData);
+
+            if (actionMatcher.find()) {
+                action = actionMatcher.group(1);
+            }
+            if (outputMatcher.find()) {
+                output = outputMatcher.group(1);
+            }
+            if (exitCodeMatcher.find()) {
+                try {
+                    exitCode = Short.parseShort(exitCodeMatcher.group(1));
+                } catch (NumberFormatException e) {
+                    System.out.println("Error parsing exit code: " + e.getMessage());
+                }
+            }
+            shutdownApplication = "SHUTDOWN".equals(action);
+
+            if ("ERROR".equals(action)) {
+                output = "Error processing command line as client: " + output;
+            }
+
+            if (output != null && !output.isEmpty()) {
+                if (output.startsWith("[") && output.endsWith("]")) {
+                    output = output.substring(1, output.length() - 1);
+                }
+                // since we don't have gson and don't deserialize the response, remove escaping for cleaner output
+                output = output
+                    .replace("\\\\\\\"", "\"")
+                    .replace("\\\"", "\"")
+                    .replace("\\\\\\\\t", "\t")
+                    .replace("\\\\t", "\t")
+                    .replace("\\\"{", "{")
+                    .replace("}\\\"", "}")
+                    .replace("\\\\\\\\n", "\n")
+                    .replace("\\\\n", "\n")
+                    .replace("\\n", "\n")
+                    .replace("\\r", "")
+                ;
+                System.out.println(output);
+            }
+            return new CommandLineExecuteResult(shutdownApplication || cliMode, exitCode);
+        } catch (Exception e) {
+            if (e.getMessage() != null) {
+                System.out.println("Error during calling DBeaver server: " + e.getMessage());
+            }
+            return new CommandLineExecuteResult(false, (short) -1);
+        } finally {
+            httpExecutor.shutdown();
+        }
+    }
+
+    /**
+     * init custom ssl context to avoid default trust store initialization before an application starts
+     */
+    private SSLContext initCustomSslContext() throws Exception {
+        var factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        factory.init(KeyStore.getInstance(KeyStore.getDefaultType()));
+        var ssl = SSLContext.getInstance("TLS");
+        ssl.init(null, factory.getTrustManagers(), null);
+        return ssl;
+    }
+
+    private Path detectDefaultWorkspaceLocation(String[] args, Path dbeaverDataDir) {
+        String customWorkspacePath = System.getenv(Constants.ENV_WORKSPACE_PATH);
+        if (customWorkspacePath != null && !customWorkspacePath.isBlank()) {
+            // Custom location
+            return Path.of(customWorkspacePath);
+        }
+
+
+        String productName = findProductIdInArgs(args);
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (ARG_DATA.equals(arg)) {
+                customWorkspacePath = args[++i];
+                break;
+            }
+        }
+
+        if (productName.isEmpty()) {
+            Properties properties = loadEclipseProductProperties();
+            if (debug) {
+                System.out.println("Loaded eclipse product properties: " + properties);
+            }
+            if (properties.containsKey(Constants.PROPERTY_ECLIPSE_PRODUCT_ID)) {
+                productName = properties.getProperty(Constants.PROPERTY_ECLIPSE_PRODUCT_ID);
+            }
+        }
+        if (debug) {
+            System.out.println("product name: " + productName);
+        }
+        if (customWorkspacePath != null) {
+            return Path.of(customWorkspacePath);
+        } else if (productName.startsWith(Constants.PRODUCT_CLOUDBEAVER)) {
+            return Path.of(Constants.WORKSPACE);
+        } else if (productName.startsWith(Constants.PRODUCT_TEAM)) {
+            return dbeaverDataDir.resolve(Constants.TEAM_WORKSPACE);
+        }
+        return dbeaverDataDir.resolve(Constants.WORKSPACE6);
+    }
+
+    private InstanceServerProperties readDBeaverServerInfo(Path workspacePath) {
+        Path dbeaverProperties = workspacePath
+            .resolve(Constants.METADATA)
+            .resolve(Constants.DBEAVER_INSTANCE_PROPS);
+
+        if (Files.notExists(dbeaverProperties)) {
+            if (debug) {
+                System.out.println("DBeaver properties file not found: " + dbeaverProperties);
+            }
+            return null;
+        }
+
+        Properties properties = new Properties();
+        try (var is = Files.newInputStream(dbeaverProperties)) {
+            properties.load(is);
+
+            String prefix = InstanceServerProperties.PROPERTY_INSTANCE + ".";
+            String suffixPort = "." + InstanceServerProperties.PROPERTY_PORT;
+
+            List<Long> pids = properties.stringPropertyNames().stream()
+                .filter(key -> key.startsWith(prefix) && key.endsWith(suffixPort))
+                .map(key -> key.substring(prefix.length(), key.length() - suffixPort.length()))
+                .map(pidText -> {
+                    try {
+                        return Long.parseLong(pidText);
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .sorted(Comparator.reverseOrder())
+                .toList();
+
+            for (Long pid : pids) {
+                ProcessHandle handle = ProcessHandle.of(pid).orElse(null);
+                if (handle == null) {
+                    continue;
+                }
+
+                String base = InstanceServerProperties.PROPERTY_INSTANCE + "." + pid;
+                String portProperty = properties.getProperty(base + "." + InstanceServerProperties.PROPERTY_PORT);
+                String passwordProperty = properties.getProperty(base + "." + InstanceServerProperties.PROPERTY_PASSWORD);
+                String startedAtProperty = properties.getProperty(base + "." + InstanceServerProperties.PROPERTY_STARTED_AT);
+
+                if (portProperty == null || portProperty.isBlank()) {
+                    continue;
+                }
+                if (passwordProperty == null || passwordProperty.isBlank()) {
+                    continue;
+                }
+
+                int port;
+                try {
+                    port = Integer.parseInt(portProperty);
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+
+                long startedAt;
+                try {
+                    startedAt = startedAtProperty == null || startedAtProperty.isBlank()
+                        ? 0L
+                        : Long.parseLong(startedAtProperty);
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+
+                long actualStartedAt = handle.info()
+                    .startInstant()
+                    .map(java.time.Instant::toEpochMilli)
+                    .orElse(-1L);
+
+                boolean alive = startedAt <= 0 || (actualStartedAt > 0 && actualStartedAt == startedAt);
+                if (!alive) {
+                    continue;
+                }
+
+                return new InstanceServerProperties(port, passwordProperty);
+            }
+
+            if (debug) {
+                System.out.println("DBeaver server properties not found in workspace: " + workspacePath);
+            }
+
+            return null;
+        } catch (Exception e) {
+            log(e);
+            return null;
+        }
+    }
+
+    private static Path getDataDirectory() {
+        return Path.of(getWorkingDirectory(DBEAVER_DATA_FOLDER));
     }
 
     protected void beforeFwkInvocation() {
@@ -649,10 +1119,10 @@ public class DBeaverLauncher {
         try {
             method.invoke(clazz, passThruArgs, splashHandler);
         } catch (InvocationTargetException e) {
-            if (e.getTargetException() instanceof Error)
-                throw (Error) e.getTargetException();
-            else if (e.getTargetException() instanceof Exception)
-                throw (Exception) e.getTargetException();
+            if (e.getTargetException() instanceof Error error)
+                throw error;
+            else if (e.getTargetException() instanceof Exception exception)
+                throw exception;
             else
                 //could be a subclass of Throwable!
                 throw e;
@@ -704,14 +1174,14 @@ public class DBeaverLauncher {
             // user wants readonly config area
             return true;
         }
-        File configDir = new File(locationUrl.getFile()).getAbsoluteFile();
+        File configDir = LauncherUtils.toFile(locationUrl).getAbsoluteFile();
         if (!configDir.exists()) {
             configDir.mkdirs();
             if (!configDir.exists()) {
                 return false;
             }
         }
-        if (!canWrite(configDir)) {
+        if (!LauncherUtils.canWrite(configDir)) {
             return false;
         }
         return true;
@@ -802,7 +1272,7 @@ public class DBeaverLauncher {
 
     private void readFrameworkExtensions(URL base, ArrayList<URL> result) throws IOException {
         String[] extensions = getArrayFromList(System.getProperty(PROP_EXTENSIONS));
-        String parent = new File(base.getFile()).getParent();
+        String parent = LauncherUtils.toFile(base).getParent();
         ArrayList<String> extensionResults = new ArrayList<>(extensions.length);
         for (String extension : extensions) {
             //Search the extension relatively to the osgi plugin
@@ -817,7 +1287,7 @@ public class DBeaverLauncher {
             URL extensionURL;
             if (installLocation.getProtocol().equals("file")) { //$NON-NLS-1$
                 extensionResults.add(path);
-                extensionURL = new File(path).toURL();
+                extensionURL = LauncherUtils.toURL(new File(path));
             } else
                 extensionURL = new URL(installLocation.getProtocol(), installLocation.getHost(), installLocation.getPort(), path);
             //Load a property file of the extension, merge its content, and in case of dev mode add the bin entries
@@ -869,7 +1339,7 @@ public class DBeaverLauncher {
             baseJarList = System.getProperty(PROP_CLASSPATH);
         }
 
-        File fwkFile = new File(base.getFile());
+        File fwkFile = LauncherUtils.toFile(base);
         boolean fwkIsDirectory = fwkFile.isDirectory();
         //We found where the fwk is, remember it and its shape
         if (fwkIsDirectory) {
@@ -877,7 +1347,7 @@ public class DBeaverLauncher {
         } else {
             System.setProperty(PROP_FRAMEWORK_SHAPE, "jar");//$NON-NLS-1$
         }
-        String fwkPath = new File(new File(base.getFile()).getParent()).getAbsolutePath();
+        String fwkPath = LauncherUtils.toFile(base).getParentFile().getAbsolutePath();
         if (Character.isUpperCase(fwkPath.charAt(0))) {
             char[] chars = fwkPath.toCharArray();
             chars[0] = Character.toLowerCase(chars[0]);
@@ -887,7 +1357,7 @@ public class DBeaverLauncher {
 
         String[] baseJars = getArrayFromList(baseJarList);
         if (baseJars.length == 0) {
-            if (!inDevelopmentMode && new File(base.getFile()).isDirectory())
+            if (!inDevelopmentMode && LauncherUtils.toFile(base).isDirectory())
                 throw new IOException("Unable to initialize " + PROP_CLASSPATH); //$NON-NLS-1$
             addEntry(base, result);
             return;
@@ -903,7 +1373,7 @@ public class DBeaverLauncher {
                 }
                 URL url;
                 if (string.startsWith(FILE_SCHEME))
-                    url = new File(string.substring(5)).toURL();
+                    url = LauncherUtils.toURL(new File(string.substring(5)));
                 else
                     url = new URL(string);
                 addEntry(url, result);
@@ -914,7 +1384,7 @@ public class DBeaverLauncher {
     }
 
     protected void addEntry(URL url, List<URL> result) {
-        if (new File(url.getFile()).exists())
+        if (LauncherUtils.toFile(url).exists())
             result.add(url);
     }
 
@@ -929,7 +1399,7 @@ public class DBeaverLauncher {
             File path = new File(location);
             URL url;
             if (path.isAbsolute())
-                url = path.toURL();
+                url = LauncherUtils.toURL(path);
             else {
                 // dev path is relative, combine with base location
                 char lastChar = location.charAt(location.length() - 1);
@@ -956,12 +1426,12 @@ public class DBeaverLauncher {
         } else {
             // search in the root location
             url = getInstallLocation();
-            String pluginsLocation = new File(url.getFile(), "plugins").toString(); //$NON-NLS-1$
+            String pluginsLocation = new File(LauncherUtils.toFile(url), "plugins").toString(); //$NON-NLS-1$
             String path = searchFor(framework, pluginsLocation);
             if (path == null)
                 throw new FileNotFoundException(String.format("Could not find framework under %s", pluginsLocation)); //$NON-NLS-1$
             if (url.getProtocol().equals("file")) //$NON-NLS-1$
-                url = new File(path).toURL();
+                url = LauncherUtils.toURL(new File(path));
             else
                 url = new URL(url.getProtocol(), url.getHost(), url.getPort(), path);
         }
@@ -1151,11 +1621,11 @@ public class DBeaverLauncher {
         boolean isFile = spec.startsWith(FILE_SCHEME);
         try {
             if (isFile) {
-                File toAdjust = new File(spec.substring(5));
+                File toAdjust = LauncherUtils.toFileURL(spec);
                 toAdjust = resolveFile(toAdjust);
                 if (toAdjust.isDirectory())
-                    return adjustTrailingSlash(toAdjust.toURL(), trailingSlash);
-                return toAdjust.toURL();
+                    return LauncherUtils.adjustTrailingSlash(LauncherUtils.toURL(toAdjust), trailingSlash);
+                return LauncherUtils.toURL(toAdjust);
             }
             return new URL(spec);
         } catch (MalformedURLException e) {
@@ -1166,8 +1636,8 @@ public class DBeaverLauncher {
             try {
                 File toAdjust = new File(spec);
                 if (toAdjust.isDirectory())
-                    return adjustTrailingSlash(toAdjust.toURL(), trailingSlash);
-                return toAdjust.toURL();
+                    return LauncherUtils.adjustTrailingSlash(LauncherUtils.toURL(toAdjust), trailingSlash);
+                return LauncherUtils.toURL(toAdjust);
             } catch (MalformedURLException e1) {
                 return null;
             }
@@ -1184,20 +1654,12 @@ public class DBeaverLauncher {
             String installArea = System.getProperty(PROP_INSTALL_AREA);
             if (installArea != null) {
                 if (installArea.startsWith(FILE_SCHEME))
-                    toAdjust = new File(installArea.substring(5), toAdjust.getPath());
+                    toAdjust = new File(LauncherUtils.toFileURL(installArea), toAdjust.getPath());
                 else if (new File(installArea).exists())
                     toAdjust = new File(installArea, toAdjust.getPath());
             }
         }
         return toAdjust;
-    }
-
-    private static URL adjustTrailingSlash(URL url, boolean trailingSlash) throws MalformedURLException {
-        String file = url.getFile();
-        if (trailingSlash == (file.endsWith("/"))) //$NON-NLS-1$
-            return url;
-        file = trailingSlash ? file + "/" : file.substring(0, file.length() - 1); //$NON-NLS-1$
-        return new URL(url.getProtocol(), url.getHost(), file);
     }
 
     private URL buildLocation(String property, URL defaultLocation, String userDefaultAppendage) {
@@ -1272,34 +1734,12 @@ public class DBeaverLauncher {
 
         // TODO a little dangerous here.  Basically we have to assume that it is a file URL.
         if (install.getProtocol().equals("file")) { //$NON-NLS-1$
-            File installDir = new File(install.getFile());
-            if (canWrite(installDir))
+            File installDir = LauncherUtils.toFile(install);
+            if (LauncherUtils.canWrite(installDir))
                 return installDir.getAbsolutePath() + File.separator + CONFIG_DIR;
         }
         // We can't write in the eclipse install dir so try for some place in the user's home dir
         return computeDefaultUserAreaLocation(CONFIG_DIR);
-    }
-
-    private static boolean canWrite(File installDir) {
-        if (!installDir.isDirectory())
-            return false;
-
-        if (Files.isWritable(installDir.toPath()))
-            return true;
-
-        File fileTest = null;
-        try {
-            // we use the .dll suffix to properly test on Vista virtual directories
-            // on Vista you are not allowed to write executable files on virtual directories like "Program Files"
-            fileTest = File.createTempFile("writableArea", ".dll", installDir); //$NON-NLS-1$ //$NON-NLS-2$
-        } catch (IOException e) {
-            //If an exception occured while trying to create the file, it means that it is not writtable
-            return false;
-        } finally {
-            if (fileTest != null)
-                fileTest.delete();
-        }
-        return true;
     }
 
     /**
@@ -1318,7 +1758,7 @@ public class DBeaverLauncher {
         URL installURL = getInstallLocation();
         if (installURL == null)
             return null;
-        File installDir = new File(installURL.getFile());
+        File installDir = LauncherUtils.toFile(installURL);
         String installDirHash = getInstallDirHash();
 
         if (protectBase && Constants.OS_MACOSX.equals(os)) {
@@ -1388,7 +1828,7 @@ public class DBeaverLauncher {
         URL installURL = getInstallLocation();
         if (installURL == null)
             return ""; //$NON-NLS-1$
-        File installDir = new File(installURL.getFile());
+        File installDir = LauncherUtils.toFile(installURL);
         int hashCode;
         try {
             hashCode = installDir.getCanonicalPath().hashCode();
@@ -1401,16 +1841,43 @@ public class DBeaverLauncher {
         return String.valueOf(hashCode);
     }
 
-    /**
-     * Runs this launcher with the arguments specified in the given string.
-     *
-     * @param argString the arguments string
-     */
-    public static void main(String argString) {
-        ArrayList<String> list = new ArrayList<>(5);
-        for (StringTokenizer tokens = new StringTokenizer(argString, " "); tokens.hasMoreElements(); ) //$NON-NLS-1$
-            list.add(tokens.nextToken());
-        main(list.toArray(new String[0]));
+    private Properties loadEclipseProductProperties() {
+        Properties properties = new Properties();
+
+        URL installURL = null;
+        try {
+            installURL = getInstallLocation();
+        } catch (Exception e) {
+            if (debug) {
+                System.out.println("Could not determine install location to load " + PRODUCT_SITE_MARKER + ": " + e.getMessage());
+            }
+        }
+        if (installURL == null) {
+            if (debug) {
+                System.out.println("Install location is null, cannot load " + PRODUCT_SITE_MARKER);
+            }
+            return properties;
+        }
+        //java.io used because url may contain spaces and other non escaped chars, and Path.of(URL.toURI()) would fail
+        File eclipseProduct = new File(LauncherUtils.toFile(installURL), PRODUCT_SITE_MARKER);
+        if (debug) {
+            System.out.println("Loading product properties from " + eclipseProduct);
+        }
+        if (!eclipseProduct.exists()) {
+            if (debug) {
+                System.out.println("Not exists " + eclipseProduct);
+            }
+            return properties;
+        }
+
+        try (FileInputStream in = new FileInputStream(eclipseProduct)) {
+            properties.load(in);
+        } catch (IOException e) {
+            if (debug) {
+                System.out.println("Could not load " + PRODUCT_SITE_MARKER + " file: " + e.getMessage());
+            }
+        }
+        return properties;
     }
 
     /**
@@ -1458,6 +1925,12 @@ public class DBeaverLauncher {
     public int run(String[] args) {
         int result;
         try {
+            if (DelegateMainLauncher.canHandle(args)) {
+                commands = args;
+                String[] passThruArgs = processCommandLine(Arrays.copyOf(args, args.length));
+                DelegateMainLauncher.run(passThruArgs);
+                return 0;
+            }
             basicRun(args);
             String exitCode = System.getProperty(PROP_EXITCODE);
             try {
@@ -1553,6 +2026,17 @@ public class DBeaverLauncher {
                 found = true;
             }
 
+            // look for the new instance arg
+            if (args[i].equalsIgnoreCase(NEW_INSTANCE)) {
+                newInstance = true;
+                found = true;
+            }
+
+            if (args[i].equalsIgnoreCase(Constants.ARG_FORCE_CLI_MODE)) {
+                cliMode = true;
+                found = true;
+            }
+
             // check if this is initialization pass
             if (args[i].equalsIgnoreCase(INITIALIZE)) {
                 initialize = true;
@@ -1614,8 +2098,13 @@ public class DBeaverLauncher {
 
             // check for args with parameters. If we are at the last argument or if the next one
             // has a '-' as the first character, then we can't have an arg with a parm so continue.
-            if (i == args.length - 1 || args[i + 1].startsWith("-")) //$NON-NLS-1$
+            if (i == args.length - 1 || args[i + 1].startsWith("-")) { //$NON-NLS-1$
+                if (!args[i].startsWith("-")) {
+                    // Suppress splash
+                    splashDown = true;
+                }
                 continue;
+            }
             String arg = args[++i];
 
             // look for the development mode and class path entries.
@@ -1806,25 +2295,69 @@ public class DBeaverLauncher {
             if (debug)
                 System.out.println("Can not read product properties. " + e.getMessage()); //$NON-NLS-1$
         }
+
+        return null;
+    }
+
+    public static Path getDefaultSecretStorageLocation() {
+        String userHome = System.getProperty(PROP_USER_HOME);
+        if (userHome == null) {
+            return Path.of(DEFAULT_SECURE_STORAGE_FILENAME);
+        } else {
+            return Path.of(userHome, DEFAULT_SECURE_STORAGE_FILENAME);
+        }
+    }
+
+    private Path useCustomSecretStorage(Path localPath) {
+        try {
+            if (!Files.exists(localPath)) {
+                Files.createDirectories(localPath);
+            }
+            if (Files.exists(localPath)) {
+                Path storagePath =
+                    localPath
+                        .resolve(DBEAVER_SECURE_DIR)
+                        .resolve(DBEAVER_SECURE_FILE);
+
+                if (!Files.exists(storagePath)) {
+                    Files.createDirectories(storagePath.getParent());
+                    Path defaultLocation = getDefaultSecretStorageLocation();
+                    if (Files.exists(defaultLocation)) {
+                        Files.copy(defaultLocation, storagePath, StandardCopyOption.REPLACE_EXISTING);
+                    } else {
+                        Files.createFile(storagePath);
+                    }
+                }
+                return storagePath;
+            }
+        } catch (IOException e) {
+            log(e);
+        }
         return null;
     }
 
     public static String getWorkingDirectory(String defaultWorkspaceLocation) {
+        String customDataPath = System.getenv(Constants.ENV_DATA_PATH);
+        if (customDataPath != null && !customDataPath.isBlank()) {
+            // Custom location
+            return Path.of(customDataPath).resolve(defaultWorkspaceLocation).toAbsolutePath().toString();
+        }
+
         String osName = (System.getProperty("os.name")).toUpperCase();
         String workingDirectory;
         if (osName.contains("WIN")) {
             String appData = System.getenv("AppData");
             if (appData == null) {
-                appData = System.getProperty("user.home");
+                appData = System.getProperty(PROP_USER_HOME);
             }
             workingDirectory = appData + "\\" + defaultWorkspaceLocation;
         } else if (osName.contains("MAC")) {
-            workingDirectory = System.getProperty("user.home") + "/Library/" + defaultWorkspaceLocation;
+            workingDirectory = System.getProperty(PROP_USER_HOME) + "/Library/" + defaultWorkspaceLocation;
         } else {
             // Linux
             String dataHome = System.getProperty("XDG_DATA_HOME");
             if (dataHome == null) {
-                dataHome = System.getProperty("user.home") + "/.local/share";
+                dataHome = System.getProperty(PROP_USER_HOME) + "/.local/share";
             }
             String badWorkingDir = dataHome + "/." + defaultWorkspaceLocation;
             String goodWorkingDir = dataHome + "/" + defaultWorkspaceLocation;
@@ -1858,7 +2391,7 @@ public class DBeaverLauncher {
             return null;
         }
 
-        File installDir = new File(installURL.getFile());
+        File installDir = LauncherUtils.toFile(installURL);
         File eclipseProduct = new File(installDir, PRODUCT_SITE_MARKER);
         if (eclipseProduct.exists()) {
             Properties props = new Properties();
@@ -1884,14 +2417,19 @@ public class DBeaverLauncher {
     private void processGlobalConfiguration() {
         try {
             final Properties config = readGlobalConfiguration();
-            setSystemPropertyIfNotSet(PROP_NL, config.getProperty(DBEAVER_PROP_LANGUAGE));
+            String nlProperty = config.getProperty(DBEAVER_PROP_LANGUAGE);
+            if (nlProperty == null || nlProperty.isBlank()) {
+                // Make English the default language
+                nlProperty = "en";
+            }
+            setSystemPropertyIfNotSet(PROP_NL, nlProperty);
         } catch (IOException e) {
             log("Unable to read global configuration file: " + e.getMessage());
         }
     }
 
     private Properties readGlobalConfiguration() throws IOException {
-        final Path root = Path.of(getWorkingDirectory(DBEAVER_DATA_FOLDER));
+        final Path root = getDataDirectory();
         final Path file = root.resolve(DBEAVER_CONFIG_FOLDER).resolve(DBEAVER_CONFIG_FILE);
         final Properties properties = new Properties();
 
@@ -2157,7 +2695,7 @@ public class DBeaverLauncher {
             try {
                 // create a file URL (via File) to normalize the form (e.g., put
                 // the leading / on if necessary)
-                path = new File(path).toURL().getFile();
+                path = LauncherUtils.toURL(new File(path)).getFile();
             } catch (MalformedURLException e1) {
                 // will never happen.  The path is straight from a URL.
             }
@@ -2270,14 +2808,13 @@ public class DBeaverLauncher {
             return;
         }
 
-        if (showSplash || endSplash != null) {
-            // Register the endSplashHandler to be run at VM shutdown. This hook will be
-            // removed once the splash screen has been taken down.
-            try {
-                Runtime.getRuntime().addShutdownHook(splashHandler);
-            } catch (Throwable ex) {
-                // Best effort to register the handler
-            }
+        if (splashHandler == null) {
+            splashHandler = new Thread(() -> {
+                // Called via reflection by org.eclipse.core.runtime.internal.adaptor.DefaultStartupMonitor.DefaultStartupMonitor
+                if (bridge != null && !splashDown) {
+                    bridge.updateSplash();
+                }
+            });
         }
 
         // if -endsplash is specified, use it and ignore any -showsplash command
@@ -2319,12 +2856,6 @@ public class DBeaverLauncher {
 
         splashDown = bridge.takeDownSplash();
         System.clearProperty(SPLASH_HANDLE);
-
-        try {
-            Runtime.getRuntime().removeShutdownHook(splashHandler);
-        } catch (Throwable e) {
-            // OK to ignore this, happens when the VM is already shutting down
-        }
     }
 
     /*
@@ -2349,7 +2880,7 @@ public class DBeaverLauncher {
             for (String e : entries) {
                 String entry = resolve(e);
                 if (entry != null && entry.startsWith(FILE_SCHEME)) {
-                    File entryFile = new File(entry.substring(5).replace('/', File.separatorChar));
+                    File entryFile = LauncherUtils.toFileURL(entry);
                     entry = searchFor(entryFile.getName(), entryFile.getParent());
                     if (entry != null)
                         path.add(entry);
@@ -2419,7 +2950,7 @@ public class DBeaverLauncher {
         if (configURL == null)
             return null;
         // cache the splash in the equinox launcher sub-dir in the config area
-        File splash = new File(configURL.getPath(), PLUGIN_ID);
+        File splash = new File(LauncherUtils.toFile(configURL), PLUGIN_ID);
         //include the name of the jar in the cache location
         File jarFile = new File(jarPath);
         String cache = jarFile.getName();

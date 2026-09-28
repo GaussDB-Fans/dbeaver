@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -274,7 +274,6 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
 
     @Override
     public void close() {
-        columnBindings = null;
     }
     
     private boolean resolveOverwriteBlobFileConflict(@NotNull String fileName) {
@@ -368,7 +367,7 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
 
             // Open output streams
             boolean outputClipboard = settings.isOutputClipboard();
-            if (parameters.isBinary || !outputClipboard) {
+            if (parameters.exportToStream == null && (parameters.isBinary || !outputClipboard)) {
                 outputFile = makeOutputFile(session.getProgressMonitor());
                 outputFiles.add(outputFile);
             } else {
@@ -382,7 +381,11 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
                 openOutputStreams(session.getProgressMonitor());
             }
         } catch (IOException e) {
-            closeExporter();
+            try {
+                closeExporter();
+            } catch (IOException ex) {
+                e.addSuppressed(ex);
+            }
             throw new DBCException("Data transfer IO error", e);
         }
 
@@ -394,13 +397,9 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
         }
     }
 
-    private void closeExporter() {
+    private void closeExporter() throws IOException {
         if (exportSite != null) {
-            try {
-                exportSite.flush();
-            } catch (IOException e) {
-                log.debug(e);
-            }
+            exportSite.flush();
         }
 
         if (processor != null) {
@@ -477,35 +476,40 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
     
     private void openOutputStreams(DBRProgressMonitor monitor) throws IOException {
         final boolean truncate;
-
-        boolean fileExists = Files.exists(outputFile);
-        if (fileExists && !Files.isDirectory(outputFile)) {
-            DataFileConflictBehavior behavior = prepareDataFileConflictBehavior(outputFile.getFileName().toString());
-            switch (behavior) {
-                case APPEND -> truncate = false;
-                case PATCHNAME -> {
-                    outputFile = makeOutputFile(monitor, "-" + System.currentTimeMillis());
-                    truncate = false;
-                    fileExists = false;
-                }
-                case OVERWRITE -> truncate = true;
-                default -> throw new RuntimeException("Unexpected data file conflict behavior " + behavior);
-            }
-        } else {
-            truncate = true;
-        }
-
         OutputStream stream;
-        if (!fileExists) {
-            log.debug("Export to the new file \"" + outputFile + "\"");
-            stream = Files.newOutputStream(outputFile, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+        if (parameters.exportToStream != null) {
+            stream = parameters.exportToStream;
         } else {
-            log.debug("Export to the existing file \"" + outputFile + "\"");
-            stream = Files.newOutputStream(
-                outputFile,
-                StandardOpenOption.WRITE,
-                (truncate ? StandardOpenOption.TRUNCATE_EXISTING : StandardOpenOption.APPEND));
+            boolean fileExists = Files.exists(outputFile);
+            if (fileExists && !Files.isDirectory(outputFile)) {
+                DataFileConflictBehavior behavior = prepareDataFileConflictBehavior(outputFile.getFileName().toString());
+                switch (behavior) {
+                    case APPEND -> truncate = false;
+                    case PATCHNAME -> {
+                        outputFile = makeOutputFile(monitor, "-" + System.currentTimeMillis());
+                        truncate = false;
+                        fileExists = false;
+                    }
+                    case OVERWRITE -> truncate = true;
+                    default -> throw new RuntimeException("Unexpected data file conflict behavior " + behavior);
+                }
+            } else {
+                truncate = true;
+            }
+
+            if (!fileExists) {
+                log.debug("Export to the new file \"" + outputFile + "\"");
+                stream = Files.newOutputStream(outputFile, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+            } else {
+                log.debug("Export to the existing file \"" + outputFile + "\"");
+                stream = Files.newOutputStream(
+                    outputFile,
+                    StandardOpenOption.WRITE,
+                    (truncate ? StandardOpenOption.TRUNCATE_EXISTING : StandardOpenOption.APPEND)
+                );
+            }
         }
+
         this.outputStream = new BufferedOutputStream(stream, OUT_FILE_BUFFER_SIZE);
         this.outputStream = this.statStream = new StatOutputStream(outputStream);
 
@@ -538,7 +542,7 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
         }
     }
 
-    private void closeOutputStreams() {
+    private void closeOutputStreams() throws IOException {
         log.debug("\tClose output stream");
         if (this.writer != null) {
             this.writer.flush();
@@ -565,7 +569,7 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
             } catch (IOException e) {
                 log.debug(e);
             }
-            ContentUtils.close(outputStream);
+            outputStream.close();
             outputStream = null;
         }
     }
@@ -606,8 +610,8 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
     
     @Override
     public void setRuntimeParameters(Object runtimeParameters) {
-        if (runtimeParameters instanceof ConsumerRuntimeParameters) {
-            this.runtimeParameters = (ConsumerRuntimeParameters) runtimeParameters;
+        if (runtimeParameters instanceof ConsumerRuntimeParameters crp) {
+            this.runtimeParameters = crp;
         } else {
             throw new IllegalStateException("Unsupported stream transfer consumer runtime parameters " + runtimeParameters);
         }
@@ -619,17 +623,24 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
     }
 
     @Override
-    public void finishTransfer(DBRProgressMonitor monitor, boolean last) {
-        finishTransfer(monitor, null, last);
-    }
+    public void finishTransfer(
+        @NotNull DBRProgressMonitor monitor,
+        @Nullable Throwable error,
+        @Nullable DBTTask task,
+        boolean last
+    ) throws DBException {
+        List<Exception> errors = new ArrayList<>(0);
 
-    @Override
-    public void finishTransfer(@NotNull DBRProgressMonitor monitor, @Nullable Throwable error, @Nullable DBTTask task, boolean last) {
         if (!last && error == null) {
             exportFooterInFile(monitor);
 
-            closeExporter();
-            return;
+            try {
+                closeExporter();
+                return;
+            } catch (IOException e) {
+                error = e; // so event processors will be notified about this error
+                errors.add(e);
+            }
         }
 
         if (!parameters.isBinary && settings.isOutputClipboard() && error == null) {
@@ -656,9 +667,20 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
                     processor.processError(monitor, error, this, task, entry.getValue());
                 }
             } catch (DBException e) {
-                DBWorkbench.getPlatformUI().showError("Transfer event processor", "Error executing data transfer event processor '" + entry.getKey() + "'", e);
-                log.error("Error executing event processor '" + entry.getKey() + "'", e);
+                DBWorkbench.getPlatformUI().showError(
+                    "Transfer event processor",
+                    "Error executing data transfer event processor '" + descriptor.getLabel() + "'",
+                    e
+                );
+                log.error("Error executing event processor '" + descriptor.getLabel() + "'", e);
+                errors.add(e);
             }
+        }
+
+        if (!errors.isEmpty()) {
+            DBException root = new DBException("Failed to finish transfer");
+            errors.forEach(root::addSuppressed);
+            throw root;
         }
     }
 
@@ -676,6 +698,14 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
     @Override
     public String getObjectName() {
         return settings.isOutputClipboard() ? "Clipboard" : getOutputFileName();
+    }
+
+    @Override
+    public String getObjectFullName(@NotNull DBRProgressMonitor monitor) throws IOException {
+        if (settings.isOutputClipboard()) {
+            return getObjectName();
+        }
+        return DBFUtils.convertPathToString(makeOutputFile(monitor));
     }
 
     @Override
@@ -704,7 +734,7 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
 
     @NotNull
     public String getOutputFolder() {
-        return translatePattern(settings.getOutputFolder(), null);
+        return translatePattern(settings.getOutputFolder());
     }
 
     @NotNull
@@ -722,7 +752,7 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
         Object extension = processorProperties == null ? null : processorProperties.get(StreamConsumerSettings.PROP_FILE_EXTENSION);
         String fileName = CommonUtils.notNull(
             runtimeParameters.outputFileNameToReuse, 
-            translatePattern(settings.getOutputFilePattern(), null).trim()
+            translatePattern(settings.getOutputFilePattern()).trim()
         );
         // Can't rememeber why did we need this. It breaks file names in case of multiple tables export (#6911)
         // if (parameters.orderNumber > 0 && !settings.isUseSingleFile()) {
@@ -794,7 +824,8 @@ public class StreamTransferConsumer implements IDataTransferConsumer<StreamConsu
         return dir.resolve(fileName);
     }
 
-    public String translatePattern(String pattern, final Path targetFile) {
+    @NotNull
+    public String translatePattern(@NotNull String pattern) {
         final Date ts;
         if (parameters.startTimestamp != null) {
             // Use saved timestamp (#7352)

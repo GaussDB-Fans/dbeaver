@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package org.jkiss.dbeaver.model.net;
 
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
-import org.jkiss.dbeaver.model.impl.AbstractDescriptor;
 import org.jkiss.dbeaver.model.preferences.DBPPropertyDescriptor;
 
 /**
@@ -35,6 +34,9 @@ public interface DBWHandlerDescriptor {
     @NotNull
     String getCodeName();
 
+    @NotNull
+    String getPrefix();
+
     String getLabel();
 
     String getDescription();
@@ -45,16 +47,24 @@ public interface DBWHandlerDescriptor {
     /**
      * Handler type
      */
+    @NotNull
     DBWHandlerType getType();
 
     boolean isSecured();
 
     /**
+     * Whether this network handler requires a connection to exist on the remote server
+     */
+    boolean isDistributed();
+
+    /**
      * Handler properties.
      * Can be used for DBWHandlerConfiguration.properties setup.
      */
+    @NotNull
     DBPPropertyDescriptor[] getHandlerProperties();
 
-    <T extends DBWNetworkHandler> T createHandler(Class<T> impl) throws DBException;
+    @NotNull
+    <T extends DBWNetworkHandler> T createHandler(@NotNull Class<T> impl) throws DBException;
 
 }

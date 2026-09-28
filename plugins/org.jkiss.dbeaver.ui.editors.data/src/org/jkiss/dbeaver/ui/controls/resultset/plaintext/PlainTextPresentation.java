@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,7 @@ import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.custom.StyledTextPrintOptions;
 import org.eclipse.swt.dnd.TextTransfer;
 import org.eclipse.swt.dnd.Transfer;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
@@ -45,13 +44,18 @@ import org.jkiss.dbeaver.model.DBPAdaptable;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
 import org.jkiss.dbeaver.model.data.DBDDisplayFormat;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
+import org.jkiss.dbeaver.ui.BaseThemeSettings;
+import org.jkiss.dbeaver.ui.NativeThemeUtils;
 import org.jkiss.dbeaver.ui.UIFonts;
 import org.jkiss.dbeaver.ui.UIStyles;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.StyledTextFindReplaceTarget;
+import org.jkiss.dbeaver.ui.controls.findandreplace.FindReplaceOverlay;
 import org.jkiss.dbeaver.ui.controls.resultset.*;
+import org.jkiss.dbeaver.ui.css.CSSUtils;
 import org.jkiss.dbeaver.ui.editors.TextEditorUtils;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -64,6 +68,7 @@ import java.util.Map;
 public class PlainTextPresentation extends AbstractPresentation implements IResultSetDisplayFormatProvider, DBPAdaptable {
 
     public static final int FIRST_ROW_LINE = 2;
+    public static final Color COLOR_GREEN_CONTRAST = new Color(null, 23, 135, 58);
 
     private StyledText text;
     private DBDAttributeBinding curAttribute;
@@ -76,6 +81,9 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
     private StyleRange curLineRange;
     private int totalRows = 0;
     private String curSelection;
+
+    @NotNull
+    private FindReplaceOverlay findReplaceOverlay;
 
     @Override
     public void createPresentation(@NotNull final IResultSetController controller, @NotNull Composite parent) {
@@ -93,18 +101,14 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
         text.setFont(UIUtils.getMonospaceFont());
         text.setLayoutData(new GridData(GridData.FILL_BOTH));
         text.addCaretListener(event -> onCursorChange(event.caretOffset));
-        text.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        text.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 curSelection = text.getSelectionText();
                 fireSelectionChanged(new PlainTextSelectionImpl());
-            }
-        });
+            }));
+        CSSUtils.setExcludeFromStyling(text);
 
         final ScrollBar verticalBar = text.getVerticalBar();
-        verticalBar.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        verticalBar.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 if (verticalBar.getSelection() + verticalBar.getPageIncrement() >= verticalBar.getMaximum()) {
                     if (controller.getPreferenceStore().getBoolean(ResultSetPreferences.RESULT_SET_AUTO_FETCH_NEXT_SEGMENT) &&
                         !controller.isRecordMode() &&
@@ -112,8 +116,7 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
                         controller.readNextSegment();
                     }
                 }
-            }
-        });
+            }));
         findReplaceTarget = new StyledTextFindReplaceTarget(text);
         TextEditorUtils.enableHostEditorKeyBindingsSupport(controller.getSite(), text);
 
@@ -122,17 +125,39 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
         registerContextMenu();
         activateTextKeyBindings(controller, text);
         trackPresentationControl();
+
+        this.findReplaceOverlay = new ResultsetFindReplaceOverlay(
+            this.controller.getSite().getPart(),
+            this.text,
+            this.findReplaceTarget,
+            this
+        ) {
+            @Override
+            protected boolean hasSelectionBoundsConflict(@Nullable ISelection selection, @NotNull Rectangle bounds) {
+                return text.getBlockSelectionBounds().intersects(bounds) || (
+                    curLineRange != null && text.getTextBounds(curLineRange.start, curLineRange.start + curLineRange.length).intersects(bounds)
+                );
+            }
+        };
+        this.findReplaceOverlay.setFilterState(this.controller.getModel().getQuickFilter());
+    }
+
+    @NotNull
+    @Override
+    public FindReplaceOverlay getFindReplaceOverlay() {
+        return this.findReplaceOverlay;
     }
 
     @Override
-    protected void applyThemeSettings(ITheme currentTheme) {
-        text.setFont(currentTheme.getFontRegistry().get(UIFonts.DBEAVER_FONTS_MONOSPACE));
+    protected void applyThemeSettings(@NotNull ITheme currentTheme) {
+        NativeThemeUtils.updateNativeTheme(text);
+        text.setFont(BaseThemeSettings.instance.monospaceFont);
         if (UIStyles.isDarkHighContrastTheme()) {
             text.setBackground(UIStyles.getDefaultWidgetBackground());
-            text.setForeground(UIUtils.COLOR_WHITE);
-            curLineColor = UIUtils.COLOR_GREEN_CONTRAST;
+            text.setForeground(UIStyles.COLOR_WHITE);
+            curLineColor = COLOR_GREEN_CONTRAST;
         } else {
-            curLineColor = currentTheme.getColorRegistry().get(ThemeConstants.COLOR_SQL_RESULT_CELL_ODD_BACK);
+            curLineColor = ResultSetThemeSettings.instance.backgroundOdd;
         }
     }
 
@@ -153,8 +178,21 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
             if (rowNum < 0) {
                 rowNum = 0;
             }
-            if (rowNum >= 0 && rowNum < model.getVisibleAttributeCount()) {
+            if (rowNum < model.getVisibleAttributeCount()) {
                 curAttribute = model.getVisibleAttribute(rowNum);
+            }
+            boolean rowChanged = false;
+            int colNum = getColumnAtOffset(horizontalOffset, delimLeading);
+            if (colNum > 0) {
+                ResultSetRow row = getRecordRow(colNum - 1);
+                if (row != null && row != controller.getCurrentRow()) {
+                    controller.setCurrentRow(row);
+                    rowChanged = true;
+                }
+            }
+            controller.updateEditControls();
+            if (rowChanged) {
+                controller.updatePanelsContent(false);
             }
         } else {
             int colNum = 0;
@@ -200,6 +238,7 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
         fireSelectionChanged(new PlainTextSelectionImpl());
     }
 
+    @Nullable
     @Override
     public Control getControl() {
         return text;
@@ -241,15 +280,63 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
     private void printRecord() {
         PlainTextFormatter formatter = new PlainTextFormatter(getController().getPreferenceStore());
         StringBuilder grid = new StringBuilder(512);
-        formatter.printRecord(grid, controller.getModel(), controller.getCurrentRow());
+        formatter.printRecord(grid, controller.getModel(), getRecordRows());
+        colWidths = formatter.getColWidths();
+        startOffset = formatter.getStartOffset();
 
         text.setText(grid.toString());
+    }
+
+    private int getColumnAtOffset(int horizontalOffset, boolean delimLeading) {
+        if (colWidths == null || colWidths.length == 0) {
+            return -1;
+        }
+        int columnEnd = startOffset;
+        if (delimLeading) {
+            columnEnd++;
+        }
+        for (int i = 0; i < colWidths.length; i++) {
+            columnEnd += colWidths[i] + 1;
+            if (horizontalOffset < columnEnd) {
+                return i;
+            }
+        }
+        return colWidths.length - 1;
+    }
+
+    @Nullable
+    private ResultSetRow getRecordRow(int recordIndex) {
+        ResultSetModel model = controller.getModel();
+        int[] selectedRecords = controller.getSelectedRecords();
+        if (recordIndex < selectedRecords.length) {
+            int selectedRecord = selectedRecords[recordIndex];
+            if (selectedRecord < model.getRowCount()) {
+                return model.getRow(selectedRecord);
+            }
+        }
+        return recordIndex == 0 ? controller.getCurrentRow() : null;
+    }
+
+    @NotNull
+    private List<ResultSetRow> getRecordRows() {
+        ResultSetModel model = controller.getModel();
+        int[] selectedRecords = controller.getSelectedRecords();
+        List<ResultSetRow> rows = new ArrayList<>(selectedRecords.length);
+        for (int selectedRecord : selectedRecords) {
+            if (selectedRecord < model.getRowCount()) {
+                rows.add(model.getRow(selectedRecord));
+            }
+        }
+        if (rows.isEmpty() && controller.getCurrentRow() != null) {
+            rows.add(controller.getCurrentRow());
+        }
+        return rows;
     }
 
     @NotNull
     @Override
     public String getFontId() {
-        return UIFonts.DBEAVER_FONTS_MONOSPACE;
+        return UIFonts.DBeaver.MONOSPACE_FONT;
     }
 
     @Override
@@ -331,7 +418,7 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
 
     @NotNull
     @Override
-    public Map<Transfer, Object> copySelection(ResultSetCopySettings settings) {
+    public Map<Transfer, Object> copySelection(@NotNull ResultSetCopySettings settings) {
         return Collections.singletonMap(
             TextTransfer.getInstance(),
             text.getSelectionText());
@@ -398,25 +485,27 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
     }
 
     @Override
-    public <T> T getAdapter(Class<T> adapter) {
+    public <T> T getAdapter(@NotNull Class<T> adapter) {
         if (adapter == IFindReplaceTarget.class) {
             return adapter.cast(findReplaceTarget);
         }
         return null;
     }
 
+    @NotNull
     @Override
     public ISelection getSelection() {
         return new PlainTextSelectionImpl();
     }
 
+    @NotNull
     @Override
     public DBDDisplayFormat getDefaultDisplayFormat() {
         return DBDDisplayFormat.safeValueOf(controller.getPreferenceStore().getString(ResultSetPreferences.RESULT_TEXT_VALUE_FORMAT));
     }
 
     @Override
-    public void setDefaultDisplayFormat(DBDDisplayFormat displayFormat) {
+    public void setDefaultDisplayFormat(@NotNull DBDDisplayFormat displayFormat) {
         controller.getPreferenceStore().setValue(ResultSetPreferences.RESULT_TEXT_VALUE_FORMAT, displayFormat.name());
     }
 
@@ -484,6 +573,9 @@ public class PlainTextPresentation extends AbstractPresentation implements IResu
         @Override
         public List<ResultSetRow> getSelectedRows()
         {
+            if (controller.isRecordMode()) {
+                return getRecordRows();
+            }
             ResultSetRow currentRow = controller.getCurrentRow();
             if (currentRow == null) {
                 return Collections.emptyList();

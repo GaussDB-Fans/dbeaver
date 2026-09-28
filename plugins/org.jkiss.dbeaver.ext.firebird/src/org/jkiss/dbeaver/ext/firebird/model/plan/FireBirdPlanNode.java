@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
  */
 package org.jkiss.dbeaver.ext.firebird.model.plan;
 
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.exec.plan.DBCPlanNode;
 import org.jkiss.dbeaver.model.impl.plan.AbstractExecutionPlanNode;
 import org.jkiss.dbeaver.model.meta.Property;
@@ -31,36 +33,41 @@ import java.util.List;
  */
 public class FireBirdPlanNode extends AbstractExecutionPlanNode {
 
-	private String plan;
-	FireBirdPlanNode parent;
-	private List<FireBirdPlanNode> nested;
-	
-	public FireBirdPlanNode(String plan) {
-		this.plan = plan;
-		this.nested = new ArrayList<>();
-	}
+	private final FireBirdPlanNode parent;
+    private final String plan;
+	private final List<FireBirdPlanNode> nested = new ArrayList<>();
 
-    @Property(order = 1, viewable = true)
+    public FireBirdPlanNode(@Nullable FireBirdPlanNode parent, @NotNull String plan) {
+        this.parent = parent;
+        this.plan = plan;
+    }
+
+    @Nullable
+	@Property(order = 1, viewable = true)
 	@Override
 	public String getNodeName() {
 		return plan;
 	}
 
+	@Nullable
 	@Override
 	public String getNodeType() {
 		return "Plan";
 	}
 
+	@Nullable
 	@Override
 	public String getNodeDescription() {
 		return plan;
 	}
 
+	@Nullable
 	@Override
 	public DBCPlanNode getParent() {
 		return parent;
 	}
 
+	@NotNull
 	@Override
 	public Collection<FireBirdPlanNode> getNested() {
 		return nested;

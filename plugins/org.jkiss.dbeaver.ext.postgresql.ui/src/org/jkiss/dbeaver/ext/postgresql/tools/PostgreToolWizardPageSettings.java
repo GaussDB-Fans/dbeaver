@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,10 @@ package org.jkiss.dbeaver.ext.postgresql.tools;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.jkiss.dbeaver.ext.postgresql.PostgreMessages;
 import org.jkiss.dbeaver.model.DBConstants;
@@ -48,8 +46,8 @@ public abstract class PostgreToolWizardPageSettings<WIZARD extends AbstractNativ
         final DBPConnectionConfiguration connectionInfo = wizard.getSettings().getDataSourceContainer().getActualConnectionConfiguration();
         final String authProperty = DBConstants.INTERNAL_PROP_PREFIX + "-auth-" + wizard.getObjectsName() + "@";
 
-        Group securityGroup = UIUtils.createControlGroup(
-            parent, PostgreMessages.wizard_backup_page_setting_group_security, 2, GridData.HORIZONTAL_ALIGN_BEGINNING, 0);
+        Composite securityGroup = UIUtils.createTitledComposite(
+            parent, PostgreMessages.wizard_backup_page_setting_group_security, 2, GridData.HORIZONTAL_ALIGN_BEGINNING);
         Label infoLabel = new Label(securityGroup, SWT.NONE);
         infoLabel.setText(NLS.bind(PostgreMessages.wizard_backup_page_setting_group_security_label_info, connectionInfo.getUserName(),
              wizard.getObjectsName()));
@@ -58,10 +56,7 @@ public abstract class PostgreToolWizardPageSettings<WIZARD extends AbstractNativ
         infoLabel.setLayoutData(gd);
         Button authButton = new Button(securityGroup, SWT.PUSH);
         authButton.setText(PostgreMessages.wizard_backup_page_setting_group_security_btn_authentication);
-        authButton.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e)
-            {
+        authButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 BaseAuthDialog authDialog = new BaseAuthDialog(getShell(), PostgreMessages.wizard_backup_page_setting_group_security_btn_authentication, false, true);
                 authDialog.setUserName(wizard.getSettings().getToolUserName());
                 authDialog.setUserPassword(wizard.getSettings().getToolUserPassword());
@@ -72,20 +67,15 @@ public abstract class PostgreToolWizardPageSettings<WIZARD extends AbstractNativ
                     wizard.getSettings().setToolUserName(authDialog.getUserName());
                     wizard.getSettings().setToolUserPassword(authDialog.getUserPassword());
                 }
-            }
-        });
+            }));
 
         Button resetButton = new Button(securityGroup, SWT.PUSH);
         resetButton.setText(PostgreMessages.wizard_backup_page_setting_group_security_btn_reset_default);
-        resetButton.addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e)
-            {
+        resetButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 connectionInfo.getProviderProperties().remove(authProperty);
                 wizard.getSettings().setToolUserName(null);
                 wizard.getSettings().setToolUserPassword(null);
-            }
-        });
+            }));
     }
 
 }

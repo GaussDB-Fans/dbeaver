@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.jkiss.dbeaver.model.sql;
 
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
+import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.DBPDataKind;
 import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPIdentifierCase;
@@ -271,10 +272,14 @@ public interface SQLDialect {
 
     boolean supportsSubqueries();
 
+    /**
+     * Returns true when database dialect allows <b>table</b> alias in FROM clause
+     */
     boolean supportsAliasInSelect();
 
     boolean supportsAliasInUpdate();
 
+    boolean supportsAsKeywordBeforeAliasInFromClause();
     /**
      * Column name to list all table columns. Usually asterisk (*).
      */
@@ -330,6 +335,7 @@ public interface SQLDialect {
 
     /**
      * Enables to call particular cast operator or function for special attribute name.
+     * Formats attribute name.
      * @param attribute   attribute data to help decide whether cast and how to cast
      * @return            casted attribute name
      */
@@ -337,13 +343,28 @@ public interface SQLDialect {
 
     /**
      * Enables to call particular cast operator or function for special data types.
+     * Wraps expression with cast if needed.
      * @param attribute   value attribute to help decide whether cast and how to cast
-     * @param expression      string representation for cast
+     * @param expression      string representation for cast, considered as NOT a reference to the given attribute
      * @param isInCondition helps to understand the application place of the method
      * @return            casted string
      */
     @NotNull
-    String getTypeCastClause(@NotNull DBSTypedObject attribute, String expression, boolean isInCondition);
+    default String getTypeCastClause(@NotNull DBSTypedObject attribute, @NotNull String expression, boolean isInCondition) {
+        return this.getTypeCastClause(attribute, expression, isInCondition, false);
+    }
+
+    /**
+     * Enables to call particular cast operator or function for special data types.
+     * Wraps expression with cast if needed.
+     * @param attribute   value attribute to help decide whether cast and how to cast
+     * @param expression      string representation for cast, considered as NOT a reference to the given attribute
+     * @param isInCondition helps to understand the application place of the method
+     * @param exprIsAttrRef true when expression represents a reference to the given attribute
+     * @return            casted string
+     */
+    @NotNull
+    String getTypeCastClause(@NotNull DBSTypedObject attribute, @NotNull String expression, boolean isInCondition, boolean exprIsAttrRef);
 
     /**
      * Quoting functions
@@ -364,11 +385,13 @@ public interface SQLDialect {
 
     String getUnquotedIdentifier(String identifier, boolean unescapeQuotesInsideIdentifier);
 
-    boolean isQuotedString(String string);
+    boolean isQuotedString(@NotNull String string);
 
-    String getQuotedString(String string);
+    @NotNull
+    String getQuotedString(@NotNull String string);
 
-    String getUnquotedString(String string);
+    @NotNull
+    String getUnquotedString(@NotNull String string);
 
     /**
      * Escapes string to make usable inside of SQL queries.
@@ -377,10 +400,10 @@ public interface SQLDialect {
      * @return escaped string
      */
     @NotNull
-    String escapeString(String string);
+    String escapeString(@NotNull String string);
 
     @NotNull
-    String unEscapeString(String string);
+    String unEscapeString(@Nullable String string);
 
     /**
      * Encode value to string format (to use it in scripts, e.g. in INSERT/UPDATE statements)
@@ -399,7 +422,13 @@ public interface SQLDialect {
     @NotNull
     MultiValueInsertMode getDefaultMultiValueInsertMode();
 
-    String addFiltersToQuery(DBRProgressMonitor monitor, DBPDataSource dataSource, String query, DBDDataFilter filter);
+    @NotNull
+    String addFiltersToQuery(
+        @Nullable DBRProgressMonitor monitor,
+        @NotNull DBPDataSource dataSource,
+        @NotNull String query,
+        @NotNull DBDDataFilter filter
+    ) throws DBException;
 
     /**
      * Two-item array containing begin and end of multi-line comments.
@@ -457,6 +486,11 @@ public interface SQLDialect {
      * they are right before the block declaration
      */
     boolean isStripCommentsBeforeBlocks();
+
+    /**
+     * Returns true if need to escape backslash character
+     */
+    boolean isEscapeBackslash();
 
     /**
      * Returns true if query is definitely transactional. Otherwise returns false, however it still may be transactional.
@@ -522,6 +556,30 @@ public interface SQLDialect {
     }
 
     default boolean useEmptyStringForNulls() {
+        return false;
+    }
+
+    default boolean supportsQualifiedColumnNames() {
+        return true;
+    }
+
+    @NotNull
+    default String toSortableTextColumn(@NotNull String columnName) {
+        return columnName;
+    }
+
+    /**
+     * Indicates whether the database dialect supports ordering
+     * by column position/index (e.g. {@code ORDER BY 1}).
+     */
+    default boolean supportsColumnIndexOrdering() {
+        return true;
+    }
+
+    /**
+     * Quotes ALL database identifiers by default.
+     */
+    default boolean isQuoteIdentifiersAlways() {
         return false;
     }
 

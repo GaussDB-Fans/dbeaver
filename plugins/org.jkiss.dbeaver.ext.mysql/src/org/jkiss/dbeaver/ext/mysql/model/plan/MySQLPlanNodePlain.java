@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
  */
 package org.jkiss.dbeaver.ext.mysql.model.plan;
 
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.dbeaver.model.exec.plan.DBCPlanNodeKind;
 import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
@@ -60,7 +62,7 @@ public class MySQLPlanNodePlain extends MySQLPlanNode {
     protected MySQLPlanNodePlain parent;
     protected List<MySQLPlanNodePlain> nested;
 
-    public MySQLPlanNodePlain(List<MySQLPlanNodePlain> nodes) {
+    public MySQLPlanNodePlain(@NotNull List<MySQLPlanNodePlain> nodes) {
         // Root node
         type = "<plan>";
         if (!nodes.isEmpty()) {
@@ -69,7 +71,7 @@ public class MySQLPlanNodePlain extends MySQLPlanNode {
         this.nested = nodes;
     }
 
-    public MySQLPlanNodePlain(MySQLPlanNodePlain parent, ResultSet dbResult) {
+    public MySQLPlanNodePlain(@Nullable MySQLPlanNodePlain parent, @NotNull ResultSet dbResult) {
         this.parent = parent;
         this.id = JDBCUtils.safeGetInteger(dbResult, "id");
         this.selectType = JDBCUtils.safeGetString(dbResult, "select_type");
@@ -99,12 +101,12 @@ public class MySQLPlanNodePlain extends MySQLPlanNode {
         this.extra = JSONUtils.getString(props, "extra");
     }
 
-    public MySQLPlanNodePlain(MySQLPlanNodePlain parent, String type) {
+    public MySQLPlanNodePlain(@Nullable MySQLPlanNodePlain parent, @NotNull String type) {
         this.parent = parent;
         this.selectType = type;
     }
 
-    protected MySQLPlanNodePlain(MySQLPlanNodePlain parent, MySQLPlanNodePlain source) {
+    protected MySQLPlanNodePlain(@Nullable MySQLPlanNodePlain parent, @NotNull MySQLPlanNodePlain source) {
         this.id = source.id;
         this.selectType = source.selectType;
         this.table = source.table;
@@ -126,6 +128,7 @@ public class MySQLPlanNodePlain extends MySQLPlanNode {
         }
     }
 
+    @Nullable
     @Override
     public MySQLPlanNodePlain getParent() {
         return parent;
@@ -149,11 +152,13 @@ public class MySQLPlanNodePlain extends MySQLPlanNode {
 
     }
 
+    @Nullable
     @Override
     public String getNodeName() {
         return table;
     }
 
+    @NotNull
     @Override
     public DBCPlanNodeKind getNodeKind() {
         if ("SIMPLE".equals(selectType)) {
@@ -166,17 +171,20 @@ public class MySQLPlanNodePlain extends MySQLPlanNode {
         return super.getNodeKind();
     }
 
+    @Nullable
     @Override
     public String getNodeDescription() {
         return ref;
     }
 
+    @Nullable
     @Override
     @Property(order = 3, viewable = true)
     public String getNodeType() {
         return selectType;
     }
 
+    @NotNull
     @Override
     public List<MySQLPlanNodePlain> getNested() {
         return nested;

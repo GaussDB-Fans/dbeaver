@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.*;
 import org.eclipse.ui.IWorkbenchPartSite;
-import org.eclipse.ui.themes.ITheme;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
@@ -63,7 +62,7 @@ import org.jkiss.dbeaver.ui.UIIcon;
 import org.jkiss.dbeaver.ui.UIUtils;
 import org.jkiss.dbeaver.ui.controls.TreeContentProvider;
 import org.jkiss.dbeaver.ui.controls.resultset.ResultSetPreferences;
-import org.jkiss.dbeaver.ui.controls.resultset.ThemeConstants;
+import org.jkiss.dbeaver.ui.controls.resultset.ResultSetThemeSettings;
 import org.jkiss.dbeaver.ui.data.*;
 import org.jkiss.dbeaver.ui.data.managers.BaseValueManager;
 import org.jkiss.dbeaver.ui.data.managers.DefaultValueManager;
@@ -74,8 +73,8 @@ import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.List;
 import java.util.*;
+import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -90,7 +89,6 @@ public class ComplexObjectEditor extends TreeViewer {
     private final IValueEditor editor;
     private DBCExecutionContext executionContext;
     private final TreeEditor treeEditor;
-    private IValueEditor curCellEditor;
 
     private final Color backgroundAdded;
     private final Color backgroundDeleted;
@@ -114,11 +112,10 @@ public class ComplexObjectEditor extends TreeViewer {
         this.parentController = parentController;
         this.editor = editor;
 
-        ITheme currentTheme = parentController.getValueSite().getWorkbenchWindow().getWorkbench().getThemeManager().getCurrentTheme();
-        this.backgroundAdded = currentTheme.getColorRegistry().get(ThemeConstants.COLOR_SQL_RESULT_CELL_NEW_BACK);
-        this.backgroundDeleted = currentTheme.getColorRegistry().get(ThemeConstants.COLOR_SQL_RESULT_CELL_DELETED_BACK);
-        this.backgroundModified = currentTheme.getColorRegistry().get(ThemeConstants.COLOR_SQL_RESULT_CELL_MODIFIED_BACK);
-        this.foregroundReadOnly = currentTheme.getColorRegistry().get(ThemeConstants.COLOR_SQL_RESULT_NULL_FOREGROUND);
+        this.backgroundAdded = ResultSetThemeSettings.instance.backgroundAdded;
+        this.backgroundDeleted = ResultSetThemeSettings.instance.backgroundDeleted;
+        this.backgroundModified = ResultSetThemeSettings.instance.backgroundModified;
+        this.foregroundReadOnly = ResultSetThemeSettings.instance.foregroundNull;
 
         final Tree treeControl = super.getTree();
         treeControl.setHeaderVisible(true);
@@ -283,16 +280,13 @@ public class ComplexObjectEditor extends TreeViewer {
                 if (!advanced) {
                     newCellEditor.primeEditorValue(valueController.getValue());
                 }
-                curCellEditor = newCellEditor;
             }
         } catch (DBException e) {
             DBWorkbench.getPlatformUI().showError("Cell editor", "Can't open cell editor", e);
         }
     }
 
-    private void disposeOldEditor()
-    {
-        curCellEditor = null;
+    private void disposeOldEditor() {
         Control oldEditor = treeEditor.getEditor();
         if (oldEditor != null) oldEditor.dispose();
     }
@@ -319,19 +313,17 @@ public class ComplexObjectEditor extends TreeViewer {
         }
     }
 
-    private String getValueText(@NotNull DBDValueHandler valueHandler, @NotNull DBSTypedObject type, @Nullable Object value, @NotNull DBDDisplayFormat format)
-    {
-        if (value instanceof CollectionElement) {
-            final CollectionElement element = (CollectionElement) value;
-            if (element.source instanceof DBDCollection) {
-                return "[" + ((DBDCollection) element.source).getComponentType().getName() + " - " + element.items.size() + "]";
+    private String getValueText(@NotNull DBDValueHandler valueHandler, @NotNull DBSTypedObject type, @Nullable Object value, @NotNull DBDDisplayFormat format) {
+        if (value instanceof CollectionElement element) {
+            if (element.source instanceof DBDCollection colElement) {
+                return "[" + colElement.getComponentType().getName() + " - " + element.items.size() + "]";
             } else {
                 return "[" + element.items.size() + "]";
             }
-        } else if (value instanceof CompositeElement) {
-            return "[" + ((CompositeElement) value).type.getName() + "]";
-        } else if (value instanceof ReferenceElement) {
-            return "--> [" + ((ReferenceElement) value).reference.getReferencedType().getName() + "]";
+        } else if (value instanceof CompositeElement compElement) {
+            return "[" + compElement.type.getName() + "]";
+        } else if (value instanceof ReferenceElement refElement) {
+            return "--> [" + refElement.reference.getReferencedType().getName() + "]";
         } else {
             return valueHandler.getValueDisplayString(type, value, format);
         }
@@ -351,22 +343,20 @@ public class ComplexObjectEditor extends TreeViewer {
         private final Object value;
         private final EditType editType;
 
-        ComplexValueController(ComplexElementItem obj, EditType editType) throws DBCException {
+        ComplexValueController(@NotNull ComplexElementItem obj, @NotNull EditType editType) throws DBCException {
             this.item = obj;
             this.editType = editType;
 
-            if (obj instanceof CollectionElement.Item) {
-                final CollectionElement.Item item = (CollectionElement.Item) obj;
-                this.valueHandler = item.getValueHandler();
-                this.type = item.getDataType();
-                this.name = type.getTypeName() + "[" + item.getName() + "]";
-                this.value = item.value;
-            } else if (obj instanceof CompositeElement.Item) {
-                final CompositeElement.Item item = (CompositeElement.Item) obj;
-                this.valueHandler = item.getValueHandler();
-                this.type = item.getDataType();
-                this.name = item.attribute.getName();
-                this.value = item.value;
+            if (obj instanceof CollectionElement.Item colItem) {
+                this.valueHandler = colItem.getValueHandler();
+                this.type = colItem.getDataType();
+                this.name = type.getTypeName() + "[" + colItem.getName() + "]";
+                this.value = colItem.value;
+            } else if (obj instanceof CompositeElement.Item compItem) {
+                this.valueHandler = compItem.getValueHandler();
+                this.type = compItem.getDataType();
+                this.name = compItem.attribute.getName();
+                this.value = compItem.value;
             } else {
                 throw new DBCException("Unsupported complex object element: " + this.item);
             }
@@ -385,12 +375,14 @@ public class ComplexObjectEditor extends TreeViewer {
             return parentController.getDataController();
         }
 
+        @NotNull
         @Override
         public String getValueName()
         {
             return name;
         }
 
+        @NotNull
         @Override
         public DBSTypedObject getValueType()
         {
@@ -421,12 +413,14 @@ public class ComplexObjectEditor extends TreeViewer {
             updateValue(value, true);
         }
 
+        @NotNull
         @Override
         public DBDValueHandler getValueHandler()
         {
             return valueHandler;
         }
 
+        @NotNull
         @Override
         public IValueManager getValueManager() {
             DBSTypedObject valueType = getValueType();
@@ -439,6 +433,7 @@ public class ComplexObjectEditor extends TreeViewer {
                 getValueHandler().getValueObjectType(valueType));
         }
 
+        @NotNull
         @Override
         public EditType getEditType()
         {
@@ -451,12 +446,14 @@ public class ComplexObjectEditor extends TreeViewer {
             return parentController.isReadOnly() || ComplexObjectEditor.isReadOnlyType(item.getParent());
         }
 
+        @NotNull
         @Override
         public IWorkbenchPartSite getValueSite()
         {
             return parentController.getValueSite();
         }
 
+        @Nullable
         @Override
         public Composite getEditPlaceholder()
         {
@@ -469,7 +466,7 @@ public class ComplexObjectEditor extends TreeViewer {
         }
 
         @Override
-        public void showMessage(String message, DBPMessageType messageType)
+        public void showMessage(@NotNull String message, @NotNull DBPMessageType messageType)
         {
 
         }
@@ -517,8 +514,7 @@ public class ComplexObjectEditor extends TreeViewer {
             return cache.get(object);
         }
 
-        if (object instanceof Collection<?>) {
-            final Collection<?> collection = (Collection<?>) object;
+        if (object instanceof Collection<?> collection) {
             final CollectionElement element;
 
             if (parent == null) {
@@ -536,8 +532,7 @@ public class ComplexObjectEditor extends TreeViewer {
             return element;
         }
 
-        if (object instanceof DBDComposite) {
-            final DBDComposite composite = (DBDComposite) object;
+        if (object instanceof DBDComposite composite) {
             final CompositeElement element = new CompositeElement(parent, composite);
 
             try {
@@ -553,12 +548,19 @@ public class ComplexObjectEditor extends TreeViewer {
             return element;
         }
 
-        if (object instanceof DBDReference) {
-            final DBDReference reference = (DBDReference) object;
+        if (object instanceof DBDReference reference) {
             final ReferenceElement element = new ReferenceElement(parent, reference);
 
             cache.put(object, element);
 
+            return element;
+        }
+
+        if (parent == null) {
+            CollectionElement element = new CollectionRootElement(new ArrayList<>());
+            element.items.add(new CollectionElement.Item(element, object));
+
+            cache.put(object, element);
             return element;
         }
 
@@ -649,9 +651,7 @@ public class ComplexObjectEditor extends TreeViewer {
                     (ComplexElementItem) selection.getFirstElement(),
                     isName ? 0 : 1,
                     DBDDisplayFormat.NATIVE);
-                if (text != null) {
-                    UIUtils.setClipboardContents(getTree().getDisplay(), TextTransfer.getInstance(), text);
-                }
+                UIUtils.setClipboardContents(getTree().getDisplay(), TextTransfer.getInstance(), text);
             }
         }
     }
@@ -699,7 +699,7 @@ public class ComplexObjectEditor extends TreeViewer {
                     log.error("Failed to populate the collection");
                 }
                 refresh();
-            } else {
+            } else if (collection != null) {
                 final CollectionElement.Item item = new CollectionElement.Item(collection, null);
 
                 collection.items.add(item);
@@ -807,8 +807,7 @@ public class ComplexObjectEditor extends TreeViewer {
         copyValueAction.setEnabled(object != null);
         setToNullAction.setEnabled(editable);
 
-        if (editable && object instanceof CollectionElement.Item) {
-            final CollectionElement.Item item = (CollectionElement.Item) object;
+        if (editable && object instanceof CollectionElement.Item item) {
             final CollectionElement collection = item.collection;
             final boolean child = !(collection instanceof CollectionRootElement);
             final int index = collection.items.indexOf(item);
@@ -970,7 +969,7 @@ public class ComplexObjectEditor extends TreeViewer {
         @NotNull
         @Override
         public Object extract(@NotNull DBRProgressMonitor monitor) {
-            return ((ComplexElement) items.get(0).value).extract(monitor);
+            return ((ComplexElement) items.getFirst().value).extract(monitor);
         }
 
         private static class Item extends CollectionElement.Item {

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Database;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Commit;
+import net.sf.jsqlparser.statement.ParenthesedStatement;
 import net.sf.jsqlparser.statement.RollbackStatement;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.alter.Alter;
@@ -41,6 +42,7 @@ import net.sf.jsqlparser.statement.insert.Insert;
 import net.sf.jsqlparser.statement.merge.Merge;
 import net.sf.jsqlparser.statement.select.*;
 import net.sf.jsqlparser.statement.update.Update;
+import net.sf.jsqlparser.util.TablesNamesFinder;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
@@ -50,7 +52,6 @@ import org.jkiss.dbeaver.model.exec.DBCAttributeMetaData;
 import org.jkiss.dbeaver.model.exec.DBCEntityMetaData;
 import org.jkiss.dbeaver.model.sql.parser.SQLSemanticProcessor;
 import org.jkiss.utils.CommonUtils;
-import org.jkiss.utils.StandardConstants;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -91,7 +92,7 @@ public class SQLQuery implements SQLScriptElement {
     private List<SQLSelectItem> selectItems;
     private String queryTitle;
     private String extraErrorMessage;
-    private List<String> allSelectEntitiesNames = new ArrayList<>();
+    private final List<String> allSelectEntitiesNames = new ArrayList<>();
 
     public SQLQuery(@Nullable DBPDataSource dataSource, @NotNull String text) {
         this(dataSource, text, 0, text.length());
@@ -129,8 +130,15 @@ public class SQLQuery implements SQLScriptElement {
         }
     }
 
+    @Nullable
+    @Override
     public DBPDataSource getDataSource() {
         return dataSource;
+    }
+
+    @NotNull
+    public List<SQLScriptElement> getScriptElements() {
+        return List.of(this);
     }
 
     private void parseQuery() {
@@ -147,29 +155,16 @@ public class SQLQuery implements SQLScriptElement {
             statement = SQLSemanticProcessor.parseQuery(dataSource == null ? null : dataSource.getSQLDialect(), text);
             if (statement instanceof Select) {
                 type = SQLQueryType.SELECT;
-                // Detect single source table (no joins, no group by, no sub-selects)
-                SelectBody selectBody = ((Select) statement).getSelectBody();
-                if (selectBody instanceof PlainSelect) {
-                    PlainSelect plainSelect = (PlainSelect) selectBody;
+                if (statement instanceof PlainSelect plainSelect) {
+                    // Detect single source table (no joins, no group by, no sub-selects)
                     FromItem fromItem = plainSelect.getFromItem();
-
-                    if (fromItem instanceof SubSelect &&
-                        isPotentiallySingleSourceSelect(plainSelect) &&
-                        ((SubSelect) fromItem).getSelectBody() instanceof PlainSelect &&
-                        isPotentiallySingleSourceSelect((PlainSelect) ((SubSelect) fromItem).getSelectBody()))
-                    {
-                        // Real select is in sub-select
-                        plainSelect = (PlainSelect) ((SubSelect) fromItem).getSelectBody();
-                        fromItem = plainSelect.getFromItem();
-                    }
-                    if (fromItem instanceof Table fromTable &&
-                        isPotentiallySingleSourceSelect(plainSelect))
-                    {
-                        boolean hasSubSelects = false, hasDirectSelects = false;
-                        for (SelectItem si : plainSelect.getSelectItems()) {
-                            if (si instanceof SelectExpressionItem && ((SelectExpressionItem) si).getExpression() instanceof SubSelect) {
+                    if (fromItem instanceof Table fromTable && isPotentiallySingleSourceSelect(plainSelect)) {
+                        boolean hasSubSelects = false;
+                        boolean hasDirectSelects = false;
+                        for (SelectItem<?> si : plainSelect.getSelectItems()) {
+                            if (si.getExpression() instanceof ParenthesedSelect) {
                                 hasSubSelects = true;
-                            } else if (si instanceof SelectExpressionItem && ((SelectExpressionItem) si).getExpression() instanceof Column) {
+                            } else if (si.getExpression() instanceof Column) {
                                 hasDirectSelects = true;
                             }
                         }
@@ -230,10 +225,10 @@ public class SQLQuery implements SQLScriptElement {
         }
     }
 
-    private boolean isValidSelectItem(@NotNull SelectItem item) {
+    private boolean isValidSelectItem(@NotNull SelectItem<?> item) {
         // Workaround for JSQLParser not respecting the `#` comment in MySQL and treating them as valid values
-        if (item instanceof SelectExpressionItem && dataSource != null) {
-            final Expression expr = ((SelectExpressionItem) item).getExpression();
+        if (dataSource != null) {
+            final Expression expr = item.getExpression();
             if (expr instanceof Column) {
                 final String name = CommonUtils.trim(((Column) expr).getColumnName());
                 if (CommonUtils.isNotEmpty(name)) {
@@ -251,7 +246,7 @@ public class SQLQuery implements SQLScriptElement {
 
     private boolean isPotentiallySingleSourceSelect(PlainSelect plainSelect) {
         return CommonUtils.isEmpty(plainSelect.getJoins()) &&
-            (plainSelect.getGroupBy() == null || CommonUtils.isEmpty(plainSelect.getGroupBy().getGroupByExpressionList().getExpressions())) &&
+            (plainSelect.getGroupBy() == null || CommonUtils.isEmpty(plainSelect.getGroupBy().getGroupByExpressionList())) &&
             CommonUtils.isEmpty(plainSelect.getIntoTables());
     }
 
@@ -295,12 +290,11 @@ public class SQLQuery implements SQLScriptElement {
      */
     public boolean isPlainSelect() {
         parseQuery();
-        if (statement instanceof Select && ((Select) statement).getSelectBody() instanceof PlainSelect) {
-            PlainSelect selectBody = (PlainSelect) ((Select) statement).getSelectBody();
-            return CommonUtils.isEmpty(selectBody.getIntoTables()) &&
-                selectBody.getLimit() == null &&
-                selectBody.getTop() == null &&
-                !selectBody.isForUpdate();
+        if (statement instanceof PlainSelect plainSelect) {
+            return CommonUtils.isEmpty(plainSelect.getIntoTables()) &&
+                plainSelect.getLimit() == null &&
+                plainSelect.getTop() == null &&
+                plainSelect.getForMode() == null;
         }
         return false;
     }
@@ -398,6 +392,7 @@ public class SQLQuery implements SQLScriptElement {
         return parseError;
     }
 
+    @Nullable
     public List<SQLQueryParameter> getParameters() {
         return parameters;
     }
@@ -447,10 +442,10 @@ public class SQLQuery implements SQLScriptElement {
 
     public DBCEntityMetaData getEntityMetadata(boolean raw) {
         parseQuery();
-        return raw? rawSingleTableMetadata : singleTableMeta;
+        return raw ? rawSingleTableMetadata : singleTableMeta;
     }
 
-    public void setParameters(List<SQLQueryParameter> parameters) {
+    public void setParameters(@Nullable List<SQLQueryParameter> parameters) {
         this.parameters = parameters;
     }
 
@@ -474,7 +469,7 @@ public class SQLQuery implements SQLScriptElement {
         if (CommonUtils.isEmpty(this.extraErrorMessage)) {
             this.extraErrorMessage = extraErrorMessage;
         } else {
-            this.extraErrorMessage = this.extraErrorMessage + System.getProperty(StandardConstants.ENV_LINE_SEPARATOR) + extraErrorMessage;
+            this.extraErrorMessage = this.extraErrorMessage + System.lineSeparator() + extraErrorMessage;
         }
     }
 
@@ -499,22 +494,20 @@ public class SQLQuery implements SQLScriptElement {
         if (statement == null) {
             return false;
         }
-        if (statement instanceof Delete) {
-            if (((Delete) statement).getWhere() == null) {
-                return true;
-            }
-        } else if (statement instanceof Update) {
-            if (((Update) statement).getWhere() == null) {
-                return true;
-            }
+        if (statement instanceof Delete delete) {
+            return delete.getWhere() == null;
+        } else if (statement instanceof Update update) {
+            return update.getWhere() == null;
         }
         return false;
     }
 
-    public boolean isDropTableDangerous() {
+    public boolean isDropDangerous() {
         parseQuery();
-        return statement != null && statement instanceof Drop &&
-            ((Drop) statement).getName() != null && ((Drop) statement).getType().equalsIgnoreCase("table");
+        return statement != null &&
+            statement instanceof Drop dropStatement &&
+            dropStatement.getName() != null
+            && dropStatement.getType() != null;
     }
 
     public boolean isModifying() {
@@ -522,23 +515,144 @@ public class SQLQuery implements SQLScriptElement {
             return false;
         }
         if (statement instanceof Select) {
-            SelectBody selectBody = ((Select) statement).getSelectBody();
-            if (selectBody instanceof PlainSelect plainSelectBody) {
-                return plainSelectBody.isForUpdate() || plainSelectBody.getIntoTables() != null;
-            }
-            return false;
-        } else {
-            return true;
+            return isMutatingStatement() ||
+                statement instanceof PlainSelect plainSelect && plainSelect.getForMode() != null;
         }
+        return true;
     }
 
     public boolean isMutatingStatement() {
         parseQuery();
+        if (statement instanceof Select) {
+            SelectMutationVisitor visitor = new SelectMutationVisitor();
+            visitor.getTables(statement);
+            return visitor.isMutating();
+        }
         return statement != null && (statement instanceof Drop || statement instanceof Delete || statement instanceof Update ||
             statement instanceof Insert || statement instanceof CreateTable || statement instanceof CreateIndex ||
             statement instanceof CreateView || statement instanceof CreateFunction || statement instanceof CreateProcedure ||
             statement instanceof CreateSchema || statement instanceof CreateSequence || statement instanceof CreateSynonym ||
-            statement instanceof Alter || statement instanceof AlterView || statement instanceof AlterSequence);
+            statement instanceof Alter || statement instanceof AlterView || statement instanceof AlterSequence ||
+            statement instanceof Merge);
+    }
+
+    private static class SelectMutationVisitor extends TablesNamesFinder<Void> {
+        private boolean mutating;
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull WithItem<?> withItem, @Nullable S context) {
+            ParenthesedStatement statement = withItem.getParenthesedStatement();
+            if (!(statement instanceof ParenthesedSelect)) {
+                mutating = true;
+                return null;
+            }
+            return super.visit(withItem, context);
+        }
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull PlainSelect plainSelect, @Nullable S context) {
+            if (!CommonUtils.isEmpty(plainSelect.getIntoTables()) || plainSelect.getIntoTempTable() != null) {
+                mutating = true;
+            }
+            visitSelectModifiers(plainSelect, context);
+            if (plainSelect.getDistinct() != null && plainSelect.getDistinct().getOnSelectItems() != null) {
+                for (var item : plainSelect.getDistinct().getOnSelectItems()) {
+                    item.accept(this, context);
+                }
+            }
+            if (plainSelect.getGroupBy() != null) {
+                if (plainSelect.getGroupBy().getGroupByExpressionList() != null) {
+                    plainSelect.getGroupBy().getGroupByExpressionList().accept(this, context);
+                }
+                if (plainSelect.getGroupBy().getGroupingSets() != null) {
+                    for (var groupingSet : plainSelect.getGroupBy().getGroupingSets()) {
+                        groupingSet.accept(this, context);
+                    }
+                }
+            }
+            if (plainSelect.getQualify() != null) {
+                plainSelect.getQualify().accept(this, context);
+            }
+            if (plainSelect.getWindowDefinitions() != null) {
+                for (var window : plainSelect.getWindowDefinitions()) {
+                    if (window.getPartitionExpressionList() != null) {
+                        window.getPartitionExpressionList().accept(this, context);
+                    }
+                    if (window.getOrderByElements() != null) {
+                        for (var orderBy : window.getOrderByElements()) {
+                            orderBy.getExpression().accept(this, context);
+                        }
+                    }
+                }
+            }
+            return super.visit(plainSelect, context);
+        }
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull SetOperationList setOperationList, @Nullable S context) {
+            visitSelectModifiers(setOperationList, context);
+            return super.visit(setOperationList, context);
+        }
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull ParenthesedSelect parenthesedSelect, @Nullable S context) {
+            visitSelectModifiers(parenthesedSelect, context);
+            return super.visit(parenthesedSelect, context);
+        }
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull Delete delete, @Nullable S context) {
+            mutating = true;
+            return null;
+        }
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull Insert insert, @Nullable S context) {
+            mutating = true;
+            return null;
+        }
+
+        @Override
+        @Nullable
+        public <S> Void visit(@NotNull Update update, @Nullable S context) {
+            mutating = true;
+            return null;
+        }
+
+        private <S> void visitSelectModifiers(@NotNull Select select, @Nullable S context) {
+            if (select.getOrderByElements() != null) {
+                for (var orderBy : select.getOrderByElements()) {
+                    orderBy.getExpression().accept(this, context);
+                }
+            }
+            if (select.getLimit() != null) {
+                if (select.getLimit().getOffset() != null) {
+                    select.getLimit().getOffset().accept(this, context);
+                }
+                if (select.getLimit().getRowCount() != null) {
+                    select.getLimit().getRowCount().accept(this, context);
+                }
+                if (select.getLimit().getByExpressions() != null) {
+                    select.getLimit().getByExpressions().accept(this, context);
+                }
+            }
+            if (select.getOffset() != null && select.getOffset().getOffset() != null) {
+                select.getOffset().getOffset().accept(this, context);
+            }
+            if (select.getFetch() != null && select.getFetch().getExpression() != null) {
+                select.getFetch().getExpression().accept(this, context);
+            }
+        }
+
+        private boolean isMutating() {
+            return mutating;
+        }
     }
 
     private static class SingleTableMeta implements DBCEntityMetaData {
@@ -591,10 +705,9 @@ public class SQLQuery implements SQLScriptElement {
 
         @Override
         public boolean equals(Object obj) {
-            if (!(obj instanceof SingleTableMeta)) {
+            if (!(obj instanceof SingleTableMeta md2)) {
                 return false;
             }
-            SingleTableMeta md2 = (SingleTableMeta) obj;
             return CommonUtils.equalObjects(catalogName, md2.catalogName) &&
                 CommonUtils.equalObjects(schemaName, md2.schemaName) &&
                 CommonUtils.equalObjects(tableName, md2.tableName);

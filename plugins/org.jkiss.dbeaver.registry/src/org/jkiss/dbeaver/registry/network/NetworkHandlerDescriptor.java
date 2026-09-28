@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
     private final String id;
     private final String label;
     private final String codeName;
+    private final String prefix;
     private final String description;
     private final DBWHandlerType type;
     private final boolean secured;
@@ -53,8 +54,8 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
     private final List<String> replacesIDs;
     private NetworkHandlerDescriptor replacedBy;
     private final DBPPropertyDescriptor[] properties;
+    private final boolean isDistributed; // see getter
     private final boolean isDesktop;
-    private final boolean isPinned;
 
     NetworkHandlerDescriptor(
         IConfigurationElement config) {
@@ -62,14 +63,15 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
 
         this.id = config.getAttribute(RegistryConstants.ATTR_ID);
         this.codeName = config.getAttribute("codeName") == null ? this.id : config.getAttribute("codeName");
+        this.prefix = config.getAttribute("prefix") == null ? this.id : config.getAttribute("prefix");
         this.label = config.getAttribute(RegistryConstants.ATTR_LABEL);
         this.description = config.getAttribute(RegistryConstants.ATTR_DESCRIPTION);
         this.type = DBWHandlerType.valueOf(config.getAttribute(RegistryConstants.ATTR_TYPE).toUpperCase(Locale.ENGLISH));
         this.secured = CommonUtils.getBoolean(config.getAttribute(RegistryConstants.ATTR_SECURED), false);
         this.handlerType = new ObjectType(config.getAttribute(RegistryConstants.ATTR_HANDLER_CLASS));
         this.order = CommonUtils.toInt(config.getAttribute(RegistryConstants.ATTR_ORDER), 1);
+        this.isDistributed = CommonUtils.getBoolean(config.getAttribute("distributed"), false);
         this.isDesktop = CommonUtils.getBoolean(config.getAttribute("desktop"), true);
-        this.isPinned = CommonUtils.getBoolean(config.getAttribute("pinned"), false);
 
         this.replacesIDs = Arrays.stream(config.getChildren("replace"))
             .map(re -> re.getAttribute("id"))
@@ -93,6 +95,12 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
         return codeName;
     }
 
+    @NotNull
+    @Override
+    public String getPrefix() {
+        return prefix;
+    }
+
     @Override
     public String getLabel() {
         return label;
@@ -103,6 +111,7 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
         return description;
     }
 
+    @NotNull
     @Override
     public DBWHandlerType getType() {
         return type;
@@ -113,6 +122,7 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
         return secured;
     }
 
+    @NotNull
     @Override
     public DBPPropertyDescriptor[] getHandlerProperties() {
         return properties;
@@ -142,9 +152,9 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
         return getHandlerType().getImplName();
     }
 
+    @NotNull
     @Override
-    public <T extends DBWNetworkHandler> T createHandler(Class<T> impl)
-        throws DBException {
+    public <T extends DBWNetworkHandler> T createHandler(@NotNull Class<T> impl) throws DBException {
         return handlerType.createInstance(impl);
     }
 
@@ -165,12 +175,13 @@ public class NetworkHandlerDescriptor extends AbstractContextDescriptor implemen
         this.replacedBy = replacedBy;
     }
 
+    @Override
+    public boolean isDistributed() {
+        return isDistributed;
+    }
+
     // Handler works in desktop application only
     public boolean isDesktopHandler() {
         return isDesktop;
-    }
-
-    public boolean isPinned() {
-        return isPinned;
     }
 }

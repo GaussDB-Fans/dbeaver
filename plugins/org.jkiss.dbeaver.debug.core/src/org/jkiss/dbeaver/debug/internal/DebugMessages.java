@@ -1,7 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
- * Copyright (C) 2017-2018 Alexander Fedorov (alexander.fedorov@jkiss.org)
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +22,6 @@ import org.eclipse.osgi.util.NLS;
 public class DebugMessages extends NLS {
 
     private static final String BUNDLE_NAME = "org.jkiss.dbeaver.debug.internal.DebugMessages"; //$NON-NLS-1$
-
-    public static String DatabaseDebugController_debug_context_purpose;
-    public static String DatabaseDebugController_debug_session_name;
-    public static String DatabaseDebugController_e_connecting_datasource;
-    public static String DatabaseDebugController_e_opening_debug_context;
 
     static {
         // initialize resource bundle

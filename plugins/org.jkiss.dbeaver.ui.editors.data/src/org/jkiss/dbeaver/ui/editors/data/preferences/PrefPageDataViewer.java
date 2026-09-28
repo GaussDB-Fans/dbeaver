@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 package org.jkiss.dbeaver.ui.editors.data.preferences;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.code.NotNull;
@@ -64,10 +63,14 @@ public class PrefPageDataViewer extends TargetPrefPage {
     @NotNull
     @Override
     protected Control createPreferenceContent(@NotNull Composite parent) {
-        final Composite composite = UIUtils.createPlaceholder(parent, 1, 5);
-
+        final Composite composite = UIUtils.createComposite(parent, 1);
         {
-            final Group group = UIUtils.createControlGroup(composite, ResultSetMessages.pref_page_data_viewer_reference_panel_group, 2, GridData.FILL_HORIZONTAL, 0);
+            Composite group = UIUtils.createTitledComposite(
+                composite,
+                ResultSetMessages.pref_page_data_viewer_reference_panel_group,
+                2,
+                GridData.FILL_HORIZONTAL
+            );
 
             UIUtils.createControlLabel(group, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_label, 2);
 
@@ -78,56 +81,48 @@ public class PrefPageDataViewer extends TargetPrefPage {
             final ToolBar toolbar = new ToolBar(group, SWT.VERTICAL);
             toolbar.setLayoutData(new GridData(GridData.VERTICAL_ALIGN_BEGINNING));
 
-            UIUtils.createToolItem(toolbar, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_add_button, UIIcon.ADD, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            UIUtils.createToolItem(toolbar, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_add_button, UIIcon.ADD, SelectionListener.widgetSelectedAdapter(e -> {
                     final String name = promptKeywordName(null);
                     if (name != null) {
                         refPanelDescColumnKeywords.add(name);
                         refPanelDescColumnKeywords.select(refPanelDescColumnKeywords.getItemCount() - 1);
                         refPanelDescColumnKeywords.notifyListeners(SWT.Selection, new Event());
                     }
-                }
-            });
-            final ToolItem removeButton = UIUtils.createToolItem(toolbar, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_remove_button, UIIcon.DELETE, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+                }));
+            final ToolItem removeButton = UIUtils.createToolItem(toolbar, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_remove_button, UIIcon.DELETE, SelectionListener.widgetSelectedAdapter(e -> {
                     final int index = refPanelDescColumnKeywords.getSelectionIndex();
                     refPanelDescColumnKeywords.remove(index);
                     refPanelDescColumnKeywords.select(CommonUtils.clamp(index, 0, refPanelDescColumnKeywords.getItemCount() - 1));
                     refPanelDescColumnKeywords.notifyListeners(SWT.Selection, new Event());
-                }
-            });
-            final ToolItem editButton = UIUtils.createToolItem(toolbar, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_edit_button, UIIcon.EDIT, new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+                }));
+            final ToolItem editButton = UIUtils.createToolItem(toolbar, ResultSetMessages.pref_page_data_viewer_reference_panel_desc_column_keywords_edit_button, UIIcon.EDIT, SelectionListener.widgetSelectedAdapter(e -> {
                     final int index = refPanelDescColumnKeywords.getSelectionIndex();
                     final String name = promptKeywordName(refPanelDescColumnKeywords.getItem(index));
                     if (name != null) {
                         refPanelDescColumnKeywords.setItem(index, name);
                     }
-                }
-            });
+                }));
 
-            refPanelDescColumnKeywords.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
+            refPanelDescColumnKeywords.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                     final boolean selected = refPanelDescColumnKeywords.getSelectionIndex() >= 0;
                     removeButton.setEnabled(selected);
                     editButton.setEnabled(selected);
-                }
-            });
+                }));
         }
         {
-            final Group group = UIUtils.createControlGroup(composite,
-                ResultSetMessages.pref_page_data_viewer_dictionary_panel_group, 1, GridData.FILL_HORIZONTAL, 0);
-            maxAmountText = UIUtils.createLabelText(group,
-                ResultSetMessages.getPref_page_data_viewer_dictionary_panel_results_max_size, "200");
+            Composite group = UIUtils.createTitledComposite(composite,
+                ResultSetMessages.pref_page_data_viewer_dictionary_panel_group, 1, GridData.FILL_HORIZONTAL);
+            maxAmountText = UIUtils.createLabelText(
+                group,
+                ResultSetMessages.getPref_page_data_viewer_dictionary_panel_results_max_size,
+                "200"
+            );
             maxAmountText.addVerifyListener(UIUtils.getNumberVerifyListener(Locale.getDefault()));
             maxAmountText.addModifyListener((event) -> {
                 updateApplyButton();
                 getContainer().updateButtons();
             });
+            UIUtils.createInfoLabel(group, ResultSetMessages.getPref_page_data_viewer_dictionary_panel_results_max_size_tip);
         }
         return composite;
     }
@@ -138,7 +133,7 @@ public class PrefPageDataViewer extends TargetPrefPage {
     }
 
     @Override
-    protected void loadPreferences(DBPPreferenceStore store) {
+    protected void loadPreferences(@NotNull DBPPreferenceStore store) {
         refPanelDescColumnKeywords.removeAll();
         for (String pattern : DBVEntity.getDescriptionColumnPatterns(store)) {
             refPanelDescColumnKeywords.add(pattern);
@@ -148,7 +143,7 @@ public class PrefPageDataViewer extends TargetPrefPage {
     }
 
     @Override
-    protected void savePreferences(DBPPreferenceStore store) {
+    protected void savePreferences(@NotNull DBPPreferenceStore store) {
         final StringJoiner buffer = new StringJoiner("|");
         for (String pattern : refPanelDescColumnKeywords.getItems()) {
             buffer.add(pattern);
@@ -172,6 +167,7 @@ public class PrefPageDataViewer extends TargetPrefPage {
         }
     }
 
+    @NotNull
     @Override
     protected String getPropertyPageID() {
         return PAGE_ID;

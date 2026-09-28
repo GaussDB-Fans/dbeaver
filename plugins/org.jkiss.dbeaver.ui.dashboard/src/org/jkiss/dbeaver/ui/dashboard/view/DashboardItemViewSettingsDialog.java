@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,7 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IDialogSettings;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.widgets.*;
 import org.jkiss.dbeaver.model.DBIcon;
@@ -70,7 +69,12 @@ public class DashboardItemViewSettingsDialog extends BaseDialog {
         Composite composite = super.createDialogArea(parent);
 
         {
-            Group infoGroup = UIUtils.createControlGroup(composite, UIDashboardMessages.dialog_dashboard_item_config_dashboardinfo, 4, GridData.FILL_HORIZONTAL, 0);
+            Composite infoGroup = UIUtils.createTitledComposite(
+                composite,
+                UIDashboardMessages.dialog_dashboard_item_config_dashboardinfo,
+                4,
+                GridData.FILL_HORIZONTAL
+            );
 
             UIUtils.createLabelText(infoGroup, UIDashboardMessages.dialog_dashboard_item_config_dashboardinfo_labels_name,
                     itemViewSettings.getItemConfiguration().getName(), SWT.BORDER | SWT.READ_ONLY)
@@ -92,9 +96,7 @@ public class DashboardItemViewSettingsDialog extends BaseDialog {
                 queriesButton.setText(UIDashboardMessages.dialog_dashboard_item_config_buttons_sqlqueries);
                 queriesButton.setImage(DBeaverIcons.getImage(DBIcon.TREE_SCRIPT));
                 queriesButton.setLayoutData(new GridData(GridData.END, GridData.BEGINNING, true, false));
-                queriesButton.addSelectionListener(new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(SelectionEvent e) {
+                queriesButton.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                         StringBuilder sql = new StringBuilder();
                         for (DashboardItemConfiguration.QueryMapping query : itemViewSettings.getItemConfiguration().getQueries()) {
                             sql.append(query.getQueryText()).append(";\n");
@@ -108,8 +110,7 @@ public class DashboardItemViewSettingsDialog extends BaseDialog {
                                 sql.toString(),
                                 false, false);
                         }
-                    }
-                });
+                    }));
                 queriesButton.setEnabled(dashboardContainer.getDataSourceContainer().isConnected());
             }
         }
@@ -143,13 +144,10 @@ public class DashboardItemViewSettingsDialog extends BaseDialog {
 
     @Override
     protected void createButtonsForButtonBar(Composite parent) {
-        createButton(parent, IDialogConstants.CANCEL_ID, UIDashboardMessages.dialog_dashboard_item_config_buttons_configuration, false).addSelectionListener(new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
+        createButton(parent, IDialogConstants.CANCEL_ID, UIDashboardMessages.dialog_dashboard_item_config_buttons_configuration, false).addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
                 DashboardItemConfigurationDialog editDialog = new DashboardItemConfigurationDialog(getShell(), itemViewSettings.getItemConfiguration(), false);
                 editDialog.open();
-            }
-        });
+            }));
         super.createButtonsForButtonBar(parent);
     }
 
