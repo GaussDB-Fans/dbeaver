@@ -347,6 +347,9 @@ public final class AIUtils {
         @NotNull DBCExecutionContext executionContext,
         @NotNull DBSCatalog catalog
     ) {
+        if (!context.isObjectAllowed(catalog)) {
+            return false;
+        }
         switch (context.getScope()) {
             case CURRENT_DATABASE, CURRENT_SCHEMA -> {
                 DBCExecutionContextDefaults<?, ?> contextDefaults = executionContext.getContextDefaults();
@@ -372,6 +375,9 @@ public final class AIUtils {
         @NotNull DBCExecutionContext executionContext,
         @NotNull DBSSchema schema
     ) {
+        if (!context.isObjectAllowed(schema)) {
+            return false;
+        }
         switch (context.getScope()) {
             case CURRENT_DATABASE -> {
                 if (schema.getParentObject() instanceof DBSCatalog parentCatalog) {
@@ -420,6 +426,9 @@ public final class AIUtils {
         } else if (object instanceof DBSSchema schema) {
             return isSchemaInScope(context, executionContext, schema);
         } else {
+            if (!context.isObjectAllowed(object)) {
+                return false;
+            }
             if (context.getScope() == AIDatabaseScope.CUSTOM) {
                 // Check that this object in the custom entity list
                 List<DBSObject> customEntities = context.getCustomEntities();

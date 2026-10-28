@@ -140,7 +140,7 @@
             class="org.jkiss.dbeaver.ui.editors.entity.EntityEditorPropertyTester"
             id="org.jkiss.dbeaver.ui.editors.entity.EntityEditorPropertyTester"
             namespace="org.jkiss.dbeaver.ui.editors.entity"
-            properties="dirty,canUndo,canRedo,hasSource"
+            properties="dirty,canUndo,canRedo,hasSource,objectType"
             type="org.jkiss.dbeaver.ui.editors.entity.EntityEditor"/>
         <propertyTester
             class="org.jkiss.dbeaver.ui.editors.entity.FolderEditorPropertyTester"
@@ -359,6 +359,7 @@
                     <count value="+"/>
                     <iterate operator="and">
                         <or>
+                            <instanceof value="org.jkiss.dbeaver.model.navigator.fs.DBNPathBase"/>
                             <adapt type="org.jkiss.dbeaver.model.navigator.DBNNode">
                                 <test property="org.jkiss.dbeaver.core.object.projectResourceViewable"/>
                             </adapt>
